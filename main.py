@@ -10,7 +10,6 @@ import uuid
 from urllib.parse import quote
 
 import aiohttp
-from aiohttp import web
 
 from astrbot.api import logger, star
 from astrbot.api.event import AstrMessageEvent, filter
@@ -628,18 +627,6 @@ class Main(star.Star):
                 save()
             except Exception as e:
                 logger.warning(f"media-luna 保存插件配置失败: {e}")
-
-    def _ensure_webui_token(self) -> str:
-        token = self._cfg("webui_token", "")
-        if token:
-            return token
-        token = uuid.uuid4().hex
-        try:
-            self.config["webui_token"] = token
-            self._save_plugin_config()
-        except Exception as e:
-            logger.warning(f"media-luna 写入 webui_token 失败: {e}")
-        return token
 
     def _save_dir(self) -> str:
         d = str(self._cfg("save_dir", "")).strip()
@@ -1894,39 +1881,8 @@ class Main(star.Star):
     """==================== 生命周期 ===================="""
 
     async def initialize(self):
-        self._webui_token = self._ensure_webui_token()
         self._rebuild_channel_commands()
-        if self._cfg("webui_enable", True):
-            host = str(self._cfg("webui_host", "127.0.0.1"))
-            port = int(self._cfg("webui_port", 6186) or 6186)
-            app = web.Application()
-            app.middlewares.append(self._webui_auth)
-            app.add_routes([
-                web.get("/", self._webui_index),
-                web.get("/api/state", self._webui_state),
-                web.get("/api/connectors", self._webui_connectors),
-                web.post("/api/channel/save", self._webui_channel_save),
-                web.post("/api/channel/delete", self._webui_channel_delete),
-                web.post("/api/preset/save", self._webui_preset_save),
-                web.post("/api/preset/delete", self._webui_preset_delete),
-                web.post("/api/preset/sync", self._webui_preset_sync),
-                web.post("/api/config", self._webui_save_config),
-                web.post("/api/upload", self._webui_upload),
-                web.get("/api/task/{task_id}", self._webui_task_detail),
-                web.get("/api/token", self._webui_token_info),
-                web.get("/media/{filename}", self._webui_media),
-            ])
-            runner = web.AppRunner(app)
-            try:
-                await runner.setup()
-                site = web.TCPSite(runner, host, port)
-                await site.start()
-                self._web_runner = runner
-                self._web_site = site
-                logger.info(f"media-luna WebUI 已启动: http://{host}:{port} (Token: {self._webui_token})")
-            except Exception as e:
-                logger.error(f"media-luna WebUI 启动失败: {e}")
-                await runner.cleanup()
+        self._register_page_apis()
         if self._cfg("auto_sync", False):
             self._sync_task = asyncio.create_task(self._auto_sync_loop())
 
@@ -1934,48 +1890,63 @@ class Main(star.Star):
         for old in list(self._channel_cmd_handlers):
             star_handlers_registry.remove(old)
         self._channel_cmd_handlers = []
+        self._unregister_page_apis()
         if self._sync_task:
             self._sync_task.cancel()
             self._sync_task = None
-        if self._web_site:
-            await self._web_site.stop()
-        if self._web_runner:
-            await self._web_runner.cleanup()
-        self._web_site = None
-        self._web_runner = None
 
-    """==================== WebUI ===================="""
+    """==================== 插件页面（主 Dashboard 内嵌） ===================="""
 
-    def _read_webui_html(self) -> str:
-        path = os.path.join(PLUGIN_DIR, "webui.html")
+    PAGE_API_PREFIX = "/media_luna/page"
+
+    def _register_page_apis(self) -> None:
+        register = self.context.register_web_api
+        routes = [
+            ("state", self._page_state, ["GET"], "Media Luna 状态"),
+            ("connectors", self._page_connectors, ["GET"], "Media Luna 连接器"),
+            ("channel/save", self._page_channel_save, ["POST"], "保存渠道"),
+            ("channel/delete", self._page_channel_delete, ["POST"], "删除渠道"),
+            ("preset/save", self._page_preset_save, ["POST"], "保存预设"),
+            ("preset/delete", self._page_preset_delete, ["POST"], "删除预设"),
+            ("preset/sync", self._page_preset_sync, ["POST"], "同步在线预设"),
+            ("config", self._page_save_config, ["POST"], "保存配置"),
+            ("task/<task_id>", self._page_task_detail, ["GET"], "任务详情"),
+            ("upload", self._page_upload, ["POST"], "上传图片"),
+            ("media/<filename>", self._page_media, ["GET"], "获取图片"),
+        ]
+        self._page_api_handlers = []
+        for route, handler, methods, desc in routes:
+            full = f"{self.PAGE_API_PREFIX}/{route}"
+            register(full, handler, methods, desc)
+            self._page_api_handlers.append((full, handler, methods, desc))
+        logger.info("media-luna 插件页面 API 已注册（挂载于主 Dashboard /api/plug）")
+
+    def _unregister_page_apis(self) -> None:
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                return f.read()
-        except OSError:
-            return "<html><body><h3>webui.html 缺失，请检查插件目录</h3></body></html>"
+            apis = self.context.registered_web_apis
+            for item in list(apis):
+                if item in self._page_api_handlers:
+                    apis.remove(item)
+        except Exception:
+            pass
 
-    @web.middleware
-    async def _webui_auth(self, request, handler):
-        if request.path.startswith("/api"):
-            if request.path == "/api/token":
-                return await handler(request)
-            token = (
-                request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
-                or request.query.get("token", "")
-            )
-            current = self._cfg("webui_token") or getattr(self, "_webui_token", "")
-            if token != current:
-                return web.json_response({"error": "unauthorized"}, status=401)
-        return await handler(request)
+    @staticmethod
+    def _ok(data=None) -> dict:
+        return {"status": "ok", "success": True, "data": data if data is not None else {}}
 
-    async def _webui_index(self, request):
-        return web.Response(
-            text=self._read_webui_html(),
-            content_type="text/html",
-            headers={"Cache-Control": "no-store"},
-        )
+    @staticmethod
+    def _err(message, **extra) -> dict:
+        return {"status": "error", "success": False, "message": str(message), **extra}
 
-    async def _webui_state(self, request):
+    async def _request_body(self) -> dict:
+        try:
+            from quart import request
+            data = await request.get_json(silent=True)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    async def _page_state(self):
         stats = load_json(STATS_FILE, {"total": {"image": 0, "video": 0}, "services": {}, "users": {}})
         channels = load_json(CHANNELS_FILE, {})
         presets = load_json(PRESETS_FILE, {})
@@ -1998,7 +1969,7 @@ class Main(star.Star):
                 item["masked"] = True
                 item["value"] = "****"
             config_items.append(item)
-        return web.json_response({
+        return self._ok({
             "channels": channels,
             "presets": presets,
             "tasks": load_json(TASKS_FILE, [])[-50:],
@@ -2009,20 +1980,17 @@ class Main(star.Star):
             "pluginDir": PLUGIN_DIR,
         })
 
-    async def _webui_connectors(self, request):
-        return web.json_response(CONNECTORS)
+    async def _page_connectors(self):
+        return self._ok(CONNECTORS)
 
-    async def _webui_channel_save(self, request):
-        try:
-            body = await request.json()
-        except Exception:
-            return web.json_response({"error": "invalid json"}, status=400)
+    async def _page_channel_save(self):
+        body = await self._request_body()
         name = body.get("name", "").strip()
         data = body.get("data")
         if not name or not isinstance(data, dict):
-            return web.json_response({"error": "invalid payload"}, status=400)
+            return self._err("invalid payload")
         if "connectorId" not in data or data["connectorId"] not in CONNECTORS:
-            return web.json_response({"error": "invalid connector"}, status=400)
+            return self._err("invalid connector")
         data.setdefault("displayName", name)
         data.setdefault("enabled", True)
         data.setdefault("connectorConfig", {})
@@ -2032,13 +2000,10 @@ class Main(star.Star):
             channels[name] = data
             save_json(CHANNELS_FILE, channels)
         self._rebuild_channel_commands()
-        return web.json_response({"ok": True})
+        return self._ok()
 
-    async def _webui_channel_delete(self, request):
-        try:
-            body = await request.json()
-        except Exception:
-            return web.json_response({"error": "invalid json"}, status=400)
+    async def _page_channel_delete(self):
+        body = await self._request_body()
         name = body.get("name", "")
         async with self._io_lock:
             channels = load_json(CHANNELS_FILE, {})
@@ -2046,17 +2011,14 @@ class Main(star.Star):
                 del channels[name]
                 save_json(CHANNELS_FILE, channels)
         self._rebuild_channel_commands()
-        return web.json_response({"ok": True})
+        return self._ok()
 
-    async def _webui_preset_save(self, request):
-        try:
-            body = await request.json()
-        except Exception:
-            return web.json_response({"error": "invalid json"}, status=400)
+    async def _page_preset_save(self):
+        body = await self._request_body()
         name = body.get("name", "").strip()
         data = body.get("data")
         if not name or not isinstance(data, dict):
-            return web.json_response({"error": "invalid payload"}, status=400)
+            return self._err("invalid payload")
         data.setdefault("source", "user")
         data.setdefault("enabled", True)
         data.setdefault("promptTemplate", "")
@@ -2071,89 +2033,82 @@ class Main(star.Star):
                 data.setdefault("remoteUrl", old.get("remoteUrl"))
             presets[name] = data
             save_json(PRESETS_FILE, presets)
-        return web.json_response({"ok": True})
+        return self._ok()
 
-    async def _webui_preset_delete(self, request):
-        try:
-            body = await request.json()
-        except Exception:
-            return web.json_response({"error": "invalid json"}, status=400)
+    async def _page_preset_delete(self):
+        body = await self._request_body()
         name = body.get("name", "")
         async with self._io_lock:
             presets = load_json(PRESETS_FILE, {})
             if name in presets:
                 del presets[name]
                 save_json(PRESETS_FILE, presets)
-        return web.json_response({"ok": True})
+        return self._ok()
 
-    async def _webui_preset_sync(self, request):
+    async def _page_preset_sync(self):
         try:
-            result = await self.sync_presets()
-            return web.json_response({"ok": True, **result})
+            return self._ok(await self.sync_presets())
         except Exception as e:
-            return web.json_response({"ok": False, "error": str(e)}, status=500)
+            return self._err(str(e))
 
-    async def _webui_save_config(self, request):
-        try:
-            updates = await request.json()
-        except Exception:
-            return web.json_response({"error": "invalid json"}, status=400)
+    async def _page_save_config(self):
+        updates = await self._request_body()
         if not isinstance(updates, dict):
-            return web.json_response({"error": "invalid payload"}, status=400)
+            return self._err("invalid payload")
         for k, v in updates.items():
             if k in self.config:
                 self.config[k] = v
-                if k == "webui_token":
-                    self._webui_token = v
         self._save_plugin_config()
-        return web.json_response({"ok": True})
+        return self._ok()
 
-    async def _webui_token_info(self, request):
-        """本机监听模式下返回当前 Token，方便登录页一键读取；非本机监听时拒绝。"""
-        host = str(self._cfg("webui_host", "127.0.0.1")).lower()
-        if host not in ("127.0.0.1", "localhost", "::1"):
-            return web.json_response({"ok": False, "error": "非本机监听，不允许读取 Token"})
-        tok = self._cfg("webui_token") or getattr(self, "_webui_token", "")
-        return web.json_response({"ok": True, "token": tok})
-
-    async def _webui_upload(self, request):
-        """上传图片（base64），保存到 media 目录，返回可访问路径"""
+    async def _page_upload(self):
+        """上传图片（multipart 或 base64 JSON），保存到 media 目录"""
+        raw = b""
+        filename = "upload.png"
         try:
-            body = await request.json()
+            from quart import request
+            files = getattr(request, "files", None) or {}
+            f = files.get("file") or files.get("image")
+            if f is not None:
+                raw = await f.read()
+                filename = getattr(f, "filename", None) or "upload.png"
         except Exception:
-            return web.json_response({"error": "invalid json"}, status=400)
-        filename = body.get("filename", "upload.png")
-        b64 = body.get("base64", "")
-        if not b64:
-            return web.json_response({"error": "no data"}, status=400)
-        try:
-            raw = base64.b64decode(b64)
-        except Exception:
-            return web.json_response({"error": "bad base64"}, status=400)
+            pass
+        if not raw:
+            body = await self._request_body()
+            filename = body.get("filename", "upload.png")
+            b64 = body.get("base64", "")
+            try:
+                raw = base64.b64decode(b64) if b64 else b""
+            except Exception:
+                return self._err("bad base64")
+        if not raw:
+            return self._err("no data")
         os.makedirs(MEDIA_DIR, exist_ok=True)
         safe = os.path.basename(filename) or "upload.png"
         name = f"{uuid.uuid4().hex[:8]}_{safe}"
         with open(os.path.join(MEDIA_DIR, name), "wb") as f:
             f.write(raw)
-        return web.json_response({"ok": True, "path": f"media/{name}"})
+        return self._ok({"path": f"media/{name}"})
 
-    async def _webui_media(self, request):
-        filename = os.path.basename(request.match_info.get("filename", ""))
-        path = os.path.join(MEDIA_DIR, filename)
+    async def _page_media(self, filename: str):
+        safe = os.path.basename(filename or "")
+        path = os.path.join(MEDIA_DIR, safe)
         if not os.path.exists(path):
-            return web.Response(status=404)
-        return web.FileResponse(path)
+            return self._err("not found")
+        with open(path, "rb") as f:
+            raw = f.read()
+        return self._ok({"mime": guess_mime(safe), "base64": base64.b64encode(raw).decode()})
 
-    async def _webui_task_detail(self, request):
-        task_id = request.match_info.get("task_id", "")
+    async def _page_task_detail(self, task_id: str):
         target = None
         for r in reversed(load_json(TASKS_FILE, [])):
             if r.get("id") == task_id or r.get("id", "").startswith(task_id):
                 target = r
                 break
         if not target:
-            return web.json_response({"error": "not found"}, status=404)
-        return web.json_response(target)
+            return self._err("not found")
+        return self._ok(target)
 
     """==================== 命令 ===================="""
 

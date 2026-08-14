@@ -8,7 +8,6 @@
 body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#f5f6fa;color:#222}
 header{background:#1f2937;color:#fff;padding:12px 20px;display:flex;align-items:center;gap:12px}
 header h1{font-size:18px;margin:0;flex:1}
-header button{background:#374151;color:#fff;border:0;padding:6px 12px;border-radius:6px;cursor:pointer}
 nav{display:flex;gap:8px;padding:12px 20px;background:#fff;border-bottom:1px solid #e5e7eb;flex-wrap:wrap}
 nav button{border:0;background:#e5e7eb;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:14px}
 nav button.active{background:#3b82f6;color:#fff}
@@ -27,16 +26,6 @@ button.small{background:#e5e7eb;color:#111;border:0;padding:4px 9px;border-radiu
 .row input,.row select{flex:1}
 .hint{color:#6b7280;font-size:13px;margin-top:6px}
 .hidden{display:none}
-#login{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:99}
-#login.show{display:flex}
-#login .box{background:#fff;border-radius:10px;padding:24px;width:320px}
-#login input{width:100%;box-sizing:border-box;padding:8px;border:1px solid #d1d5db;border-radius:6px}
-#login button{margin-top:12px;width:100%}
-.stat{display:inline-block;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 18px;margin:0 10px 10px 0}
-.stat b{font-size:22px;color:#1d4ed8}
-.msg{padding:8px 12px;border-radius:6px;margin:8px 0;display:none}
-.msg.ok{background:#ecfdf5;color:#047857;display:block}
-.msg.err{background:#fef2f2;color:#b91c1c;display:block}
 .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;background:#e5e7eb;color:#374151}
 .badge.api{background:#fef3c7;color:#92400e}
 .badge.off{background:#fee2e2;color:#b91c1c}
@@ -62,10 +51,13 @@ img.thumb{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px s
 #taskDetail{font-size:14px;line-height:1.7;white-space:pre-wrap;word-break:break-all}
 .auto-refresh{font-size:13px;color:#374151;display:flex;align-items:center;gap:4px}
 .auto-refresh input{width:auto}
+.msg{padding:8px 12px;border-radius:6px;margin:8px 0;display:none}
+.msg.ok{background:#ecfdf5;color:#047857;display:block}
+.msg.err{background:#fef2f2;color:#b91c1c;display:block}
 </style>
 </head>
 <body>
-<header><h1>🌙 Media Luna 设置</h1><span id="saveDirHint" style="font-size:12px;color:#9ca3af"></span><button onclick="logout()">切换 Token</button></header>
+<header><h1>🌙 Media Luna 设置</h1><span id="saveDirHint" style="font-size:12px;color:#9ca3af"></span></header>
 <nav>
 <button data-page="channels" class="active">渠道</button>
 <button data-page="presets">预设</button>
@@ -151,7 +143,7 @@ img.thumb{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px s
       <tbody id="configRows"></tbody>
     </table>
     <button class="primary" style="margin-top:8px" onclick="saveConfig()">保存配置</button>
-    <div class="hint">保存目录留空 = 默认保存在插件目录（当前: <span id="curSaveDir"></span>）。带 * 的为密钥/Token 字段，保留 **** 表示不修改；WebUI 端口等修改后需重启 AstrBot。</div>
+    <div class="hint">保存目录留空 = 默认保存在插件目录（当前: <span id="curSaveDir"></span>）。密钥类字段保留 **** 表示不修改。</div>
   </div>
 </section>
 
@@ -244,63 +236,35 @@ img.thumb{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px s
   </div>
 </div>
 
-<div id="login">
-  <div class="box">
-    <h3>请输入访问 Token</h3>
-    <input id="tokenInput" placeholder="WebUI Token">
-    <div id="loginError" class="hidden" style="color:#b91c1c;font-size:13px;margin-top:8px"></div>
-    <button class="primary" onclick="saveToken()">确定</button>
-    <button class="small" style="width:100%;margin-top:8px" onclick="autoFillToken()">读取本机配置 Token</button>
-    <div class="hint" style="margin-top:8px">Token 位于 AstrBot 日志，或配置文件 <code>data/config/astrbot_plugin_media_luna_config.json</code> 的 webui_token 字段</div>
-  </div>
-</div>
-
 <script>
 let state = {channels:{},presets:{},tasks:[],stats:{},config:[]};
 let connectors = {};
-let token = localStorage.getItem('ml_token') || '';
 let editingChannel = null;
 let editingPreset = null;
 let presetMode = 'detail';
 
-function msg(text, ok){const b=document.getElementById('msgBox');b.textContent=text;b.className='msg '+(ok?'ok':'err');setTimeout(()=>b.className='msg',5000);}
+const bridge = window.AstrBotPluginPage;
+
+function endpoint(path){
+  return 'page/' + String(path||'').replace(/^\/+/,'').replace(/\/+/g,'/');
+}
+function unwrap(resp){
+  const body = resp && resp.data && resp.data.status ? resp.data : resp;
+  if(body && body.status === 'ok') return body.data || {};
+  if(body && body.status === 'error') throw new Error(body.message || '请求失败');
+  return body;
+}
+async function bridgeReady(){
+  if(!bridge) throw new Error('AstrBot 插件页桥接 SDK 未加载');
+  await bridge.ready();
+}
 async function api(path, method, body){
-  const opt={method:method||'GET',headers:{'Authorization':'Bearer '+token}};
-  if(body!==undefined){opt.headers['Content-Type']='application/json';opt.body=JSON.stringify(body);}
-  const r=await fetch(path,opt);
-  if(r.status===401){const e=new Error('unauthorized');e.status=401;throw e;}
-  return r.json();
+  await bridgeReady();
+  if(method === 'POST') return unwrap(await bridge.apiPost(endpoint(path), body || {}));
+  return unwrap(await bridge.apiGet(endpoint(path), body || {}));
 }
-function showLogin(){document.getElementById('login').classList.add('show');}
-function setLoginError(msg){const el=document.getElementById('loginError');el.textContent=msg;el.classList.remove('hidden');}
-function clearLoginError(){document.getElementById('loginError').classList.add('hidden');}
-function saveToken(){
-  token=document.getElementById('tokenInput').value.trim();
-  if(!token){setLoginError('请输入 Token');return;}
-  clearLoginError();
-  localStorage.setItem('ml_token',token);
-  document.getElementById('login').classList.remove('show');
-  load();
-}
-async function autoFillToken(){
-  try{
-    const r=await fetch('/api/token');
-    const d=await r.json();
-    if(d.ok&&d.token){
-      token=d.token;
-      document.getElementById('tokenInput').value=token;
-      localStorage.setItem('ml_token',token);
-      clearLoginError();
-      document.getElementById('login').classList.remove('show');
-      await load();
-    }else{
-      setLoginError('无法读取 Token（WebUI 非本机监听）。请查看日志或配置文件中的 webui_token。');
-    }
-  }catch(e){
-    setLoginError('无法读取 Token：'+e.message);
-  }
-}
-function logout(){localStorage.removeItem('ml_token');token='';showLogin();}
+
+function msg(text, ok){const b=document.getElementById('msgBox');b.textContent=text;b.className='msg '+(ok?'ok':'err');setTimeout(()=>b.className='msg',5000);}
 
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
@@ -313,20 +277,17 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;',
 
 async function load(){
   try{
-    [state, connectors] = await Promise.all([api('/api/state'), api('/api/connectors')]);
+    [state, connectors] = await Promise.all([api('state'), api('connectors')]);
     document.getElementById('saveDirHint').textContent = '保存目录: ' + state.saveDir;
     document.getElementById('curSaveDir').textContent = state.saveDir;
     renderConnectorSelects();
     renderChannels();renderPresets();renderConfig();renderTasks();renderStats();renderRemoteCfg();
-  }catch(e){
-    if(e.status===401){showLogin();setLoginError('Token 无效或已过期，请重新输入（可点击下方按钮一键读取）');}
-    else{msg('连接设置服务失败：'+e.message,false);}
-  }
+  }catch(e){msg('加载失败：'+e.message,false);}
 }
 
 async function refreshTasksStats(){
   try{
-    const st = await api('/api/state');
+    const st = await api('state');
     state.tasks = st.tasks; state.stats = st.stats;
     renderTasks(); renderStats();
   }catch(e){}
@@ -352,7 +313,7 @@ function renderChannels(){
     const td=document.createElement('td');
     const b1=document.createElement('button');b1.className='small';b1.textContent='编辑';b1.onclick=()=>openChannelEdit(name);
     const b2=document.createElement('button');b2.className='danger';b2.style.marginLeft='6px';b2.textContent='删除';
-    b2.onclick=async()=>{if(confirm('删除渠道 '+name+'?')){await api('/api/channel/delete','POST',{name});await load();}};
+    b2.onclick=async()=>{if(confirm('删除渠道 '+name+'?')){await api('channel/delete','POST',{name});await load();}};
     td.appendChild(b1);td.appendChild(b2);tr.appendChild(td);tb.appendChild(tr);
   }
   document.getElementById('channelsJson').value=JSON.stringify(state.channels,null,2);
@@ -426,7 +387,7 @@ async function saveChannel(){
     else if(t==='number')ch.connectorConfig[k]=el.value===''?null:Number(el.value);
     else ch.connectorConfig[k]=el.value;
   });
-  await api('/api/channel/save','POST',{name,data:ch});
+  await api('channel/save','POST',{name,data:ch});
   msg('渠道已保存',true);
   closeModal('channelModal');
   await load();
@@ -435,7 +396,7 @@ async function saveChannel(){
 async function saveChannelsJson(){
   try{state.channels=JSON.parse(document.getElementById('channelsJson').value);}catch(e){msg('渠道 JSON 格式错误',false);return;}
   for(const [name,data] of Object.entries(state.channels)){
-    await api('/api/channel/save','POST',{name,data});
+    await api('channel/save','POST',{name,data});
   }
   msg('渠道已保存',true);await load();
 }
@@ -449,17 +410,28 @@ function setPresetMode(mode){
   renderPresets();
 }
 
-function renderPresets(){
+async function loadThumb(img, value){
+  img.classList.remove('hidden');
+  if(!value){img.style.display='none';return;}
+  if(/^(https?:|data:)/.test(value)){img.style.display='';img.src=value;return;}
+  try{
+    const d=await api('media/'+encodeURIComponent(String(value).replace(/^media\//,'')));
+    img.style.display='';img.src='data:'+d.mime+';base64,'+d.base64;
+  }catch(e){img.style.display='none';}
+}
+
+async function renderPresets(){
   if(presetMode==='simple'){
     const grid=document.getElementById('presetGrid');grid.innerHTML='';
     for(const [name,p] of Object.entries(state.presets)){
       const card=document.createElement('div');card.className='preset-card';
-      const thumb=p.thumbnail
-        ?'<img src="'+esc(p.thumbnail)+'" onerror="this.outerHTML=\'<div class=&quot;no-thumb&quot;>🖼</div>\'">'
-        :'<div class="no-thumb">🖼</div>';
-      card.innerHTML=thumb+'<div class="name">'+esc(name)+'</div>'+
-        '<div class="meta">'+(p.source==='api'?'<span class="badge api">在线</span>':'<span class="badge">本地</span>')+' '+
-        (p.enabled===false?'<span class="badge off">禁用</span>':'')+'</div>';
+      const img=document.createElement('img');
+      loadThumb(img, p.thumbnail);
+      card.appendChild(img);
+      const nm=document.createElement('div');nm.className='name';nm.textContent=name;card.appendChild(nm);
+      const meta=document.createElement('div');meta.className='meta';
+      meta.innerHTML=(p.source==='api'?'<span class="badge api">在线</span>':'<span class="badge">本地</span>')+' '+(p.enabled===false?'<span class="badge off">禁用</span>':'');
+      card.appendChild(meta);
       card.onclick=()=>openPresetEdit(name);
       grid.appendChild(card);
     }
@@ -468,14 +440,17 @@ function renderPresets(){
   const tb=document.getElementById('presetRows');tb.innerHTML='';
   for(const [name,p] of Object.entries(state.presets)){
     const tr=document.createElement('tr');
-    const thumb=p.thumbnail?'<img class="thumb" src="'+esc(p.thumbnail)+'" onerror="this.style.display=\'none\'">':'';
-    tr.innerHTML='<td>'+esc(name)+'</td><td>'+esc((p.promptTemplate||'').slice(0,50))+'</td><td>'+esc((p.tags||[]).slice(0,3).join(', '))+'</td><td>'+thumb+'</td>'+
-      '<td><span class="badge '+(p.source==='api'?'api':'')+'">'+(p.source==='api'?'在线':'本地')+'</span></td>'+
-      '<td>'+(p.enabled===false?'<span class="badge off">禁用</span>':'<span class="badge">启用</span>')+'</td>';
+    const tdThumb=document.createElement('td');
+    const img=document.createElement('img');img.className='thumb';loadThumb(img, p.thumbnail);
+    tdThumb.appendChild(img);
+    tr.innerHTML='<td>'+esc(name)+'</td><td>'+esc((p.promptTemplate||'').slice(0,50))+'</td><td>'+esc((p.tags||[]).slice(0,3).join(', '))+'</td>';
+    tr.insertBefore(tdThumb, tr.children[3]);
+    const src=document.createElement('td');src.innerHTML='<span class="badge '+(p.source==='api'?'api':'')+'">'+(p.source==='api'?'在线':'本地')+'</span>';tr.appendChild(src);
+    const st=document.createElement('td');st.innerHTML=(p.enabled===false?'<span class="badge off">禁用</span>':'<span class="badge">启用</span>');tr.appendChild(st);
     const td=document.createElement('td');
     const b1=document.createElement('button');b1.className='small';b1.textContent='编辑';b1.onclick=()=>openPresetEdit(name);
     const b2=document.createElement('button');b2.className='danger';b2.style.marginLeft='6px';b2.textContent='删除';
-    b2.onclick=async()=>{if(confirm('删除预设 '+name+'?')){await api('/api/preset/delete','POST',{name});await load();}};
+    b2.onclick=async()=>{if(confirm('删除预设 '+name+'?')){await api('preset/delete','POST',{name});await load();}};
     td.appendChild(b1);td.appendChild(b2);tr.appendChild(td);tb.appendChild(tr);
   }
   document.getElementById('presetsJson').value=JSON.stringify(state.presets,null,2);
@@ -491,17 +466,16 @@ function openPresetEdit(name){
   document.getElementById('psThumb').value=p.thumbnail||'';
   document.getElementById('psRefs').value=(p.referenceImages||[]).join('\n');
   document.getElementById('psEnabled').value=p.enabled===false?'false':'true';
-  const prev=document.getElementById('psThumbPreview');
-  if(p.thumbnail){prev.src=p.thumbnail;prev.classList.remove('hidden');}else{prev.classList.add('hidden');}
+  loadThumb(document.getElementById('psThumbPreview'), p.thumbnail);
   document.getElementById('presetModal').classList.add('show');
 }
 
 async function uploadImage(file){
   if(!file)return null;
-  const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
-  const r=await api('/api/upload','POST',{filename:file.name,base64:b64});
-  if(r.ok)return r.path;
-  return null;
+  try{
+    const d=unwrap(await bridge.upload(endpoint('upload'), file));
+    return d.path || null;
+  }catch(e){msg('上传失败：'+e.message,false);return null;}
 }
 
 function setupDrop(zoneId, onFile){
@@ -516,7 +490,7 @@ function setupDrop(zoneId, onFile){
 }
 setupDrop('psThumbZone',async f=>{
   const path=await uploadImage(f);
-  if(path){document.getElementById('psThumb').value=path;const prev=document.getElementById('psThumbPreview');prev.src=path;prev.classList.remove('hidden');}
+  if(path){document.getElementById('psThumb').value=path;loadThumb(document.getElementById('psThumbPreview'), path);}
 });
 setupDrop('psRefsZone',async f=>{
   const path=await uploadImage(f);
@@ -525,7 +499,7 @@ setupDrop('psRefsZone',async f=>{
 
 document.getElementById('psThumbFile').onchange=async function(){
   const path=await uploadImage(this.files[0]);
-  if(path){document.getElementById('psThumb').value=path;const prev=document.getElementById('psThumbPreview');prev.src=path;prev.classList.remove('hidden');}
+  if(path){document.getElementById('psThumb').value=path;loadThumb(document.getElementById('psThumbPreview'), path);}
   this.value='';
 };
 
@@ -550,7 +524,7 @@ async function savePreset(){
     source:(editingPreset&&state.presets[editingPreset]&&state.presets[editingPreset].source)||'user',
     enabled:document.getElementById('psEnabled').value==='true',
     thumbnail:document.getElementById('psThumb').value.trim()};
-  await api('/api/preset/save','POST',{name,data:p});
+  await api('preset/save','POST',{name,data:p});
   msg('预设已保存',true);
   closeModal('presetModal');
   await load();
@@ -559,7 +533,7 @@ async function savePreset(){
 async function savePresetsJson(){
   try{state.presets=JSON.parse(document.getElementById('presetsJson').value);}catch(e){msg('预设 JSON 格式错误',false);return;}
   for(const [name,data] of Object.entries(state.presets)){
-    await api('/api/preset/save','POST',{name,data});
+    await api('preset/save','POST',{name,data});
   }
   msg('预设已保存',true);await load();
 }
@@ -573,10 +547,12 @@ function renderRemoteCfg(){
 
 async function syncPresets(){
   document.getElementById('syncResult').textContent='正在同步...';
-  const r=await api('/api/preset/sync','POST',{});
-  document.getElementById('syncResult').textContent=r.ok?
-    '✅ 同步完成: 新增 '+r.added+'，更新 '+r.updated+'，删除 '+r.removed+(r.errors&&r.errors.length?'，失败 '+r.errors.length:'') :
-    '❌ 同步失败: '+(r.error||'');
+  try{
+    const r=await api('preset/sync','POST',{});
+    document.getElementById('syncResult').textContent='✅ 同步完成: 新增 '+r.added+'，更新 '+r.updated+'，删除 '+r.removed+(r.errors&&r.errors.length?'，失败 '+r.errors.length:'');
+  }catch(e){
+    document.getElementById('syncResult').textContent='❌ 同步失败: '+e.message;
+  }
   await load();
 }
 
@@ -587,14 +563,13 @@ async function saveRemoteCfg(){
     sync_interval:Number(document.getElementById('cfg-sync_interval').value)||60,
     delete_removed:document.getElementById('cfg-delete_removed').value==='true'
   };
-  await api('/api/config','POST',updates);
+  await api('config','POST',updates);
   msg('在线预设设置已保存',true);
 }
 
 function renderConfig(){
   const tb=document.getElementById('configRows');tb.innerHTML='';
   for(const item of state.config){
-    if(item.key==='webui_token')continue;
     const tr=document.createElement('tr');
     const td1=document.createElement('td');
     td1.textContent=item.name||item.key;
@@ -624,8 +599,8 @@ async function saveConfig(){
     else if(inp.value==='****')return;
     else updates[inp.dataset.key]=inp.value;
   });
-  await api('/api/config','POST',updates);
-  msg('配置已保存（WebUI 端口/监听地址等需重启 AstrBot 生效）',true);
+  await api('config','POST',updates);
+  msg('配置已保存',true);
   await load();
 }
 
@@ -641,7 +616,7 @@ function renderTasks(){
 
 async function openTaskDetail(id){
   try{
-    const t=await api('/api/task/'+encodeURIComponent(id));
+    const t=await api('task/'+encodeURIComponent(id));
     const lines=[
       '任务 ID: '+t.id,
       '时间: '+new Date(t.ts*1000).toLocaleString(),
@@ -672,10 +647,8 @@ function renderStats(){
 }
 
 function closeModal(id){document.getElementById(id).classList.remove('show');}
-// 单击空白不关闭，双击空白才关闭
 document.querySelectorAll('.modal').forEach(m=>m.addEventListener('dblclick',e=>{if(e.target===m)closeModal(m.id);}));
 
-// 自动刷新（默认开启，5 秒一次）
 setInterval(()=>{
   if(document.getElementById('autoRefresh')&&document.getElementById('autoRefresh').checked){
     refreshTasksStats();

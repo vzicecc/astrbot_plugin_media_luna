@@ -52,29 +52,5 @@
     "description": "生成结果中是否显示使用的模型",
     "type": "bool",
     "default": true
-  },
-  "webui_enable": {
-    "name": "启用独立 WebUI",
-    "description": "是否在独立端口启动全量设置页面",
-    "type": "bool",
-    "default": true
-  },
-  "webui_host": {
-    "name": "WebUI 监听地址",
-    "description": "127.0.0.1 仅本机可访问；0.0.0.0 局域网可访问",
-    "type": "string",
-    "default": "127.0.0.1"
-  },
-  "webui_port": {
-    "name": "WebUI 端口",
-    "description": "独立设置页面的端口，如 6186",
-    "type": "int",
-    "default": 6186
-  },
-  "webui_token": {
-    "name": "WebUI 访问 Token",
-    "description": "留空则自动生成随机 Token",
-    "type": "string",
-    "default": ""
   }
 }
