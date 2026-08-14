@@ -4,3 +4,4 @@ author: Media Luna port
 version: 1.1.0
 pages:
   - dashboard
+  - config
