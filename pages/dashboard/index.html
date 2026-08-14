@@ -243,8 +243,6 @@ let editingChannel = null;
 let editingPreset = null;
 let presetMode = 'detail';
 
-const bridge = window.AstrBotPluginPage;
-
 function endpoint(path){
   return 'page/' + String(path||'').replace(/^\/+/,'').replace(/\/+/g,'/');
 }
@@ -255,13 +253,15 @@ function unwrap(resp){
   return body;
 }
 async function bridgeReady(){
-  if(!bridge) throw new Error('AstrBot 插件页桥接 SDK 未加载');
-  await bridge.ready();
+  const b = window.AstrBotPluginPage;
+  if(!b) throw new Error('AstrBot 插件页桥接 SDK 未加载');
+  await b.ready();
+  return b;
 }
 async function api(path, method, body){
-  await bridgeReady();
-  if(method === 'POST') return unwrap(await bridge.apiPost(endpoint(path), body || {}));
-  return unwrap(await bridge.apiGet(endpoint(path), body || {}));
+  const b = await bridgeReady();
+  if(method === 'POST') return unwrap(await b.apiPost(endpoint(path), body || {}));
+  return unwrap(await b.apiGet(endpoint(path), body || {}));
 }
 
 function msg(text, ok){const b=document.getElementById('msgBox');b.textContent=text;b.className='msg '+(ok?'ok':'err');setTimeout(()=>b.className='msg',5000);}
@@ -473,7 +473,8 @@ function openPresetEdit(name){
 async function uploadImage(file){
   if(!file)return null;
   try{
-    const d=unwrap(await bridge.upload(endpoint('upload'), file));
+    const b=await bridgeReady();
+    const d=unwrap(await b.upload(endpoint('upload'), file));
     return d.path || null;
   }catch(e){msg('上传失败：'+e.message,false);return null;}
 }
