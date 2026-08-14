@@ -15,6 +15,7 @@ from astrbot.api import logger, star
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import Image, Plain, Record, Video
 from astrbot.core.star.filter.command import CommandFilter, GreedyStr
+from astrbot.core.star.filter.regex import RegexFilter
 from astrbot.core.star.star_handler import (
     EventType,
     StarHandlerMetadata,
@@ -569,6 +570,7 @@ class Main(star.Star):
         self._web_site = None
         self._sync_task = None
         self._channel_cmd_handlers = []
+        self._channel_regex_handler = None
         os.makedirs(MEDIA_DIR, exist_ok=True)
         self._migrate_channels()
         if not os.path.exists(CHANNELS_FILE):
@@ -1890,6 +1892,9 @@ class Main(star.Star):
         for old in list(self._channel_cmd_handlers):
             star_handlers_registry.remove(old)
         self._channel_cmd_handlers = []
+        if self._channel_regex_handler is not None:
+            star_handlers_registry.remove(self._channel_regex_handler)
+            self._channel_regex_handler = None
         self._unregister_page_apis()
         if self._sync_task:
             self._sync_task.cancel()
@@ -2223,6 +2228,9 @@ class Main(star.Star):
         for old in list(self._channel_cmd_handlers):
             star_handlers_registry.remove(old)
         self._channel_cmd_handlers = []
+        if self._channel_regex_handler is not None:
+            star_handlers_registry.remove(self._channel_regex_handler)
+            self._channel_regex_handler = None
         channels = load_json(CHANNELS_FILE, {})
         for name, ch in channels.items():
             if not ch.get("enabled", True):
@@ -2269,7 +2277,61 @@ class Main(star.Star):
             md.event_filters.append(CommandFilter(name, None, md))
             star_handlers_registry.append(md)
             self._channel_cmd_handlers.append(md)
-        logger.info(f"media-luna 已注册 {len(self._channel_cmd_handlers)} 个渠道指令")
+
+        # 免唤醒前缀的渠道指令（正则匹配，任意群聊/私聊均可直接触发）
+        enabled_names = [
+            name for name, ch in channels.items()
+            if ch.get("enabled", True) and ch.get("connectorId") in CONNECTORS
+        ]
+        if enabled_names:
+            pattern = r"^(?:" + "|".join(
+                re.escape(n) for n in sorted(enabled_names, key=len, reverse=True)
+            ) + r")(?=\s|$)"
+
+            def make_regex_handler():
+                async def _channel_regex(event):
+                    text = event.get_message_str().strip()
+                    if text.startswith("/"):
+                        return
+                    first = text.split(maxsplit=1)[0] if text else ""
+                    chan = self.get_channel(first)
+                    if not chan or not chan.get("enabled", True):
+                        return
+                    cid = chan.get("connectorId", "")
+                    if cid not in CONNECTORS:
+                        return
+                    if cid in AUDIO_CONNECTOR_IDS and cid not in IMAGE_CONNECTOR_IDS and cid not in VIDEO_CONNECTOR_IDS:
+                        kind = "audio"
+                    elif cid in VIDEO_CONNECTOR_IDS and cid not in IMAGE_CONNECTOR_IDS:
+                        kind = "video"
+                    else:
+                        kind = "image"
+                    rest = text[len(first):].strip()
+                    async for r in self._run_generate(
+                        event, "", kind, channel_override=first, prompt_override=rest
+                    ):
+                        yield r
+
+                _channel_regex.__name__ = "channel_regex"
+                return _channel_regex
+
+            handler = make_regex_handler()
+            md = StarHandlerMetadata(
+                event_type=EventType.AdapterMessageEvent,
+                handler_full_name=f"{self.__module__}__channel_regex",
+                handler_name="channel_regex",
+                handler_module_path=self.__module__,
+                handler=handler,
+                event_filters=[RegexFilter(pattern)],
+                desc="渠道指令（免唤醒前缀）",
+            )
+            star_handlers_registry.append(md)
+            self._channel_regex_handler = md
+
+        logger.info(
+            f"media-luna 已注册 {len(self._channel_cmd_handlers)} 个渠道指令"
+            f"{' + 免唤醒入口' if self._channel_regex_handler else ''}"
+        )
 
     @filter.command("redraw", alias={"重新生成"})
     async def redraw(self, event: AstrMessageEvent, task_id: str):
