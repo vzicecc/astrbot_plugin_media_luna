@@ -57,7 +57,11 @@ img.thumb{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px s
 </style>
 </head>
 <body>
-<header><h1>🌙 Media Luna 设置</h1><span id="saveDirHint" style="font-size:12px;color:#9ca3af"></span></header>
+<header><h1>🌙 Media Luna 设置</h1><span id="saveDirHint" style="font-size:12px;color:#9ca3af"></span><button onclick="backToDashboard()">返回 Dashboard</button></header>
+<div id="loadError" class="hidden" style="padding:10px 20px;background:#fef2f2;color:#b91c1c;font-size:14px;display:flex;align-items:center;gap:10px">
+  <span id="loadErrorText">加载失败</span>
+  <button class="small" onclick="load()">重试</button>
+</div>
 <nav>
 <button data-page="channels" class="active">渠道</button>
 <button data-page="presets">预设</button>
@@ -236,6 +240,18 @@ img.thumb{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px s
   </div>
 </div>
 
+<div id="confirmModal" class="modal">
+  <div class="box" style="width:400px">
+    <h3>确认操作</h3>
+    <div id="confirmMsg" style="font-size:14px;color:#374151;word-break:break-all"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="danger" id="confirmOk">确定</button>
+      <button class="small" onclick="confirmCancel()">取消</button>
+      <span class="hint">双击空白处也可关闭</span>
+    </div>
+  </div>
+</div>
+
 <script>
 let state = {channels:{},presets:{},tasks:[],stats:{},config:[]};
 let connectors = {};
@@ -253,7 +269,12 @@ function unwrap(resp){
   return body;
 }
 async function bridgeReady(){
-  const b = window.AstrBotPluginPage;
+  let b = window.AstrBotPluginPage;
+  const deadline = Date.now() + 3000;
+  while(!b && Date.now() < deadline){
+    await new Promise(r=>setTimeout(r,100));
+    b = window.AstrBotPluginPage;
+  }
   if(!b) throw new Error('AstrBot 插件页桥接 SDK 未加载');
   await b.ready();
   return b;
@@ -277,13 +298,44 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;',
 
 async function load(){
   try{
+    document.getElementById('loadError').classList.add('hidden');
     [state, connectors] = await Promise.all([api('state'), api('connectors')]);
     document.getElementById('saveDirHint').textContent = '保存目录: ' + state.saveDir;
     document.getElementById('curSaveDir').textContent = state.saveDir;
     renderConnectorSelects();
     renderChannels();renderPresets();renderConfig();renderTasks();renderStats();renderRemoteCfg();
-  }catch(e){msg('加载失败：'+e.message,false);}
+  }catch(e){
+    document.getElementById('loadErrorText').textContent='加载失败：'+e.message;
+    document.getElementById('loadError').classList.remove('hidden');
+    msg('加载失败：'+e.message,false);
+  }
 }
+
+function backToDashboard(){
+  try{
+    window.top.location.href = window.location.origin + '/';
+  }catch(e){
+    window.location.href = '/';
+  }
+}
+
+let confirmResolve = null;
+function askConfirm(message){
+  return new Promise(res=>{
+    confirmResolve = res;
+    document.getElementById('confirmMsg').textContent = message;
+    document.getElementById('confirmModal').classList.add('show');
+  });
+}
+function confirmOk(){
+  if(confirmResolve){confirmResolve(true);confirmResolve=null;}
+  closeModal('confirmModal');
+}
+function confirmCancel(){
+  if(confirmResolve){confirmResolve(false);confirmResolve=null;}
+  closeModal('confirmModal');
+}
+document.getElementById('confirmOk').onclick = confirmOk;
 
 async function refreshTasksStats(){
   try{
@@ -313,7 +365,7 @@ function renderChannels(){
     const td=document.createElement('td');
     const b1=document.createElement('button');b1.className='small';b1.textContent='编辑';b1.onclick=()=>openChannelEdit(name);
     const b2=document.createElement('button');b2.className='danger';b2.style.marginLeft='6px';b2.textContent='删除';
-    b2.onclick=async()=>{if(confirm('删除渠道 '+name+'?')){await api('channel/delete','POST',{name});await load();}};
+    b2.onclick=async()=>{if(await askConfirm('确定删除渠道「'+name+'」？')){await api('channel/delete','POST',{name});await load();}};
     td.appendChild(b1);td.appendChild(b2);tr.appendChild(td);tb.appendChild(tr);
   }
   document.getElementById('channelsJson').value=JSON.stringify(state.channels,null,2);
@@ -450,7 +502,7 @@ async function renderPresets(){
     const td=document.createElement('td');
     const b1=document.createElement('button');b1.className='small';b1.textContent='编辑';b1.onclick=()=>openPresetEdit(name);
     const b2=document.createElement('button');b2.className='danger';b2.style.marginLeft='6px';b2.textContent='删除';
-    b2.onclick=async()=>{if(confirm('删除预设 '+name+'?')){await api('preset/delete','POST',{name});await load();}};
+    b2.onclick=async()=>{if(await askConfirm('确定删除预设「'+name+'」？')){await api('preset/delete','POST',{name});await load();}};
     td.appendChild(b1);td.appendChild(b2);tr.appendChild(td);tb.appendChild(tr);
   }
   document.getElementById('presetsJson').value=JSON.stringify(state.presets,null,2);
@@ -647,7 +699,10 @@ function renderStats(){
   }
 }
 
-function closeModal(id){document.getElementById(id).classList.remove('show');}
+function closeModal(id){
+  if(id==='confirmModal' && confirmResolve){confirmResolve(false);confirmResolve=null;}
+  document.getElementById(id).classList.remove('show');
+}
 document.querySelectorAll('.modal').forEach(m=>m.addEventListener('dblclick',e=>{if(e.target===m)closeModal(m.id);}));
 
 setInterval(()=>{
