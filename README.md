@@ -1,0 +1,88 @@
+# Media Luna (AstrBot 移植版)
+
+按照 Koishi `koishi-plugin-media-luna` 的结构复现到 AstrBot：
+
+- 24 个连接器（渠道）：
+  - 生图：DALL-E / OpenAI、Chat API（兼容接口）、Gemini、SD WebUI、ComfyUI、Flux(Replicate)、Midjourney(Proxy)、Stability、豆包 Seedream、NovelAI、Pollinations、Agnes Image、BytePlus Seedream、Custom Form Image、ModelScope（魔搭）、Peinture（派奇智图）、Vertex AI、测试（本地生成）
+  - 视频：OpenAI Video (Sora)、Agnes Video、NewAPI Video、Runway、智谱 CogVideoX
+  - 音频：Suno AI 音乐
+- **每个渠道可自定义**：请求地址、API Key、模型、输出尺寸/宽高比、步数、采样器、负面提示词等，字段随连接器动态变化
+- **在线预设**：拉取 Prompt-Manager 在线模板，自动生成关键词（类型标签 + 模板标签）；预设支持自定义触发词、提示词（可用 `{prompt}` 占位符）、参考图、缩略图
+- **保存目录可配置**：`save_dir` 留空默认保存在插件目录下，也可指向任意目录
+- 简单用量统计（`/stats`、`/mystats`）、任务记录（`/tasks`、`/taskinfo`），不做积分计费
+- 独立 WebUI 全量设置页面（默认 `http://127.0.0.1:6186`）
+
+## 安装
+
+将本目录放到 `R:\AstrBot\data\plugins\` 下，重启 `astrbot run` 或在 Dashboard 插件管理中重载。
+
+## 聊天指令
+
+所有命令使用唤醒前缀（默认 `/`）：
+
+| 命令 | 说明 |
+|------|------|
+| `/<渠道> [预设] <提示词>` | 渠道名即指令，如 `/nano 一只猫`。纯视频渠道自动生成视频，其他默认生成图片 |
+| `/video <渠道> [预设] <提示词>` | 显式指定生成视频（如 ComfyUI 渠道生成视频时使用） |
+| `/redraw <任务ID>`（别名 `/重新生成 <任务ID>`） | 复刻指定任务，用相同渠道和提示词重新生成 |
+| `/channels` | 查看渠道及其模型 |
+| `/preset list` | 查看预设（触发词 / 关键词 / 来源） |
+| `/preset sync` | 立即同步在线预设 |
+| `/preset add <触发词> <提示词>` | 新建预设（关键词/参考图/缩略图到 WebUI 补充） |
+| `/preset del <触发词>` | 删除预设 |
+| `/tasks [数量]`、`/taskinfo <ID>` | 任务记录 |
+| `/stats`、`/mystats` | 用量统计 |
+
+消息中附带的图片会作为参考图（图生图）传给支持该能力的连接器（SD WebUI / Gemini / 豆包 / Stability / ComfyUI）。
+
+> 渠道指令是插件启动时按 `channels.json` 动态注册的真实指令（受唤醒前缀约束），在 WebUI 增删/启停渠道后自动重新注册，无需重启。
+
+## WebUI 设置页面
+
+```
+http://127.0.0.1:6186
+```
+
+- Token：配置里 `webui_token` 留空则首次启动自动生成，打印在 AstrBot 日志中，也可在 `data/config/astrbot_plugin_media_luna_config.json` 查看。本机监听时登录页可直接点「读取本机配置 Token」自动填入；修改 Token 后立即生效，无需重启。
+- **渠道**：增删改渠道。连接器决定了可编辑字段（请求地址、尺寸/宽高比、模型、Key 等），页面按字段类型动态渲染；开关类字段均为「开启/关闭」下拉。
+- **预设**：管理触发词、提示词模板、关键词（逗号分隔，渠道关键词与之匹配）、缩略图（URL 或本地上传/拖拽）、参考图（每行一个 URL 或上传/拖拽）。支持**详情模式**（表格）和**简略模式**（触发词+缩略图的框型卡片）两种视图。
+- **在线预设**：配置 API 地址、自动同步、间隔、是否删除已下线预设，并支持一键同步。
+- **配置**：保存目录（留空 = 插件目录）、超时、输出组合（任务ID/用时/模型是否显示）、WebUI 监听地址/端口。所有开关类配置均为「开启/关闭」下拉。
+- **任务/统计**：支持手动刷新和自动刷新（默认 5 秒一次，可关闭）；点击任务行查看完整详情。
+- 弹窗关闭：单击空白处不会关闭正在编辑的渠道/预设，**双击空白处**才关闭。
+
+## 输出内容组合
+
+生成结果是一条整合消息（不分开发送），可配置显示哪些部分（WebUI → 配置，或 `data/config/astrbot_plugin_media_luna_config.json`）：
+
+- `output_show_task_id`：是否显示任务ID
+- `output_show_elapsed`：是否显示生成总用时
+- `output_show_model`：是否显示使用的模型
+
+默认组合顺序：任务ID → 图片/视频 → 用时 → 模型。
+
+## 在线预设说明
+
+默认从 `https://prompt.vioaki.xyz/api/templates?per_page=-1` 拉取（Prompt-Manager 项目）。
+
+每个模板同步后自动生成关键词：`类型标签`（txt2img→text2img、img2img 等）+ 模板自带标签，可用于与渠道关键词匹配。参考图和缩略图直接使用远程 URL；如需本地化，可在预设编辑中手动改为上传的图片。
+
+## 保存目录
+
+`save_dir` 留空时，生成的图片/视频默认保存在**插件目录**下（文件名形如 `20260812_103000_gemini_0.png`）。设置后保存到指定目录（例如 `R:\AstrBot\data\media-luna-images`）。
+
+## 数据文件
+
+插件目录下：
+
+- `channels.json`：渠道定义（`connectorId` + 每渠道 `connectorConfig` + `tags`）
+- `presets.json`：预设（触发词=键名，含 `promptTemplate`、`tags`、`referenceImages`、`thumbnail`、`source`）
+- `tasks.json` / `stats.json`：任务记录与用量统计
+- `media/`：WebUI 上传的缩略图/参考图
+
+## 注意
+
+- v1 渠道配置（`type/model/size` 格式）会在首次加载时自动迁移为 v2（`connectorId/connectorConfig`）。
+- API Key 改为按渠道配置，请到 WebUI 各渠道里填写（或直接编辑 `channels.json`）。
+- Midjourney 适配通用 Proxy（`/imagine` + `/result`），不同服务商的路径/鉴权头可能不同，按需调整 `apiUrl`。
+- ComfyUI 需要先在渠道里配置工作流 JSON（API 格式），用 `{{prompt}}` 作为提示词占位符。

@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Media Luna - AstrBot 设置</title>
+<style>
+body{font-family:system-ui,-apple-system,sans-serif;margin:0;background:#f5f6fa;color:#222}
+header{background:#1f2937;color:#fff;padding:12px 20px;display:flex;align-items:center;gap:12px}
+header h1{font-size:18px;margin:0;flex:1}
+header button{background:#374151;color:#fff;border:0;padding:6px 12px;border-radius:6px;cursor:pointer}
+nav{display:flex;gap:8px;padding:12px 20px;background:#fff;border-bottom:1px solid #e5e7eb;flex-wrap:wrap}
+nav button{border:0;background:#e5e7eb;padding:8px 14px;border-radius:6px;cursor:pointer;font-size:14px}
+nav button.active{background:#3b82f6;color:#fff}
+main{padding:20px;max-width:1200px;margin:0 auto}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px;margin-bottom:16px}
+.card h2{margin:0 0 12px;font-size:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.card h2 .spacer{flex:1}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{border-bottom:1px solid #f3f4f6;padding:8px;text-align:left;vertical-align:top}
+input,textarea,select{width:100%;box-sizing:border-box;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:14px}
+textarea{font-family:Consolas,monospace}
+button.primary{background:#3b82f6;color:#fff;border:0;padding:8px 16px;border-radius:6px;cursor:pointer}
+button.danger{background:#ef4444;color:#fff;border:0;padding:5px 10px;border-radius:6px;cursor:pointer}
+button.small{background:#e5e7eb;color:#111;border:0;padding:4px 9px;border-radius:6px;cursor:pointer;font-size:13px}
+.row{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.row input,.row select{flex:1}
+.hint{color:#6b7280;font-size:13px;margin-top:6px}
+.hidden{display:none}
+#login{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:99}
+#login.show{display:flex}
+#login .box{background:#fff;border-radius:10px;padding:24px;width:320px}
+#login input{width:100%;box-sizing:border-box;padding:8px;border:1px solid #d1d5db;border-radius:6px}
+#login button{margin-top:12px;width:100%}
+.stat{display:inline-block;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px 18px;margin:0 10px 10px 0}
+.stat b{font-size:22px;color:#1d4ed8}
+.msg{padding:8px 12px;border-radius:6px;margin:8px 0;display:none}
+.msg.ok{background:#ecfdf5;color:#047857;display:block}
+.msg.err{background:#fef2f2;color:#b91c1c;display:block}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;background:#e5e7eb;color:#374151}
+.badge.api{background:#fef3c7;color:#92400e}
+.badge.off{background:#fee2e2;color:#b91c1c}
+img.thumb{width:48px;height:48px;object-fit:cover;border-radius:6px;border:1px solid #e5e7eb}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;z-index:50;overflow:auto;padding:30px 0}
+.modal.show{display:flex}
+.modal .box{background:#fff;border-radius:10px;padding:20px;width:780px;max-width:94vw}
+.modal h3{margin:0 0 12px}
+.modal .field{margin-bottom:10px}
+.modal .field label{display:block;font-size:13px;color:#374151;margin-bottom:3px}
+.modal .field .desc{font-size:12px;color:#9ca3af}
+.preset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.preset-card{background:#fff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;cursor:pointer;text-align:center;transition:box-shadow .15s}
+.preset-card:hover{box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.preset-card img{width:100%;height:120px;object-fit:cover;display:block}
+.preset-card .no-thumb{width:100%;height:120px;display:flex;align-items:center;justify-content:center;font-size:34px;background:#f3f4f6;color:#d1d5db}
+.preset-card .name{padding:8px;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.preset-card .meta{padding:0 8px 8px;font-size:12px;color:#6b7280}
+.dropzone{border:2px dashed #d1d5db;border-radius:8px;padding:10px;text-align:center;color:#6b7280;font-size:13px;transition:border-color .15s,background .15s}
+.dropzone.drag{border-color:#3b82f6;background:#eff6ff}
+.task-row{cursor:pointer}
+.task-row:hover{background:#f9fafb}
+#taskDetail{font-size:14px;line-height:1.7;white-space:pre-wrap;word-break:break-all}
+.auto-refresh{font-size:13px;color:#374151;display:flex;align-items:center;gap:4px}
+.auto-refresh input{width:auto}
+</style>
+</head>
+<body>
+<header><h1>🌙 Media Luna 设置</h1><span id="saveDirHint" style="font-size:12px;color:#9ca3af"></span><button onclick="logout()">切换 Token</button></header>
+<nav>
+<button data-page="channels" class="active">渠道</button>
+<button data-page="presets">预设</button>
+<button data-page="remote">在线预设</button>
+<button data-page="config">配置</button>
+<button data-page="tasks">任务</button>
+<button data-page="stats">统计</button>
+</nav>
+<main>
+<div id="msgBox" class="msg"></div>
+
+<section id="page-channels" class="page">
+  <div class="card">
+    <h2>渠道列表<span class="hint">使用 /渠道名 提示词 直接生成</span></h2>
+    <table>
+      <thead><tr><th>触发词</th><th>连接器</th><th>模型</th><th>关键词</th><th style="width:90px">状态</th><th style="width:130px">操作</th></tr></thead>
+      <tbody id="channelRows"></tbody>
+    </table>
+    <div class="row" style="margin-top:12px">
+      <input id="newChanName" placeholder="新渠道触发词，如 gemini2">
+      <select id="newChanConnector"></select>
+      <button class="primary" onclick="openChannelEdit()">新建渠道</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>渠道 JSON（高级编辑）</h2>
+    <textarea id="channelsJson" style="min-height:160px"></textarea>
+    <button class="primary" style="margin-top:8px" onclick="saveChannelsJson()">保存渠道</button>
+  </div>
+</section>
+
+<section id="page-presets" class="page hidden">
+  <div class="card">
+    <h2>预设列表
+      <span class="spacer"></span>
+      <button class="small" id="presetModeDetail" onclick="setPresetMode('detail')">详情模式</button>
+      <button class="small" id="presetModeSimple" onclick="setPresetMode('simple')">简略模式</button>
+      <button class="primary" onclick="openPresetEdit()">新建预设</button>
+    </h2>
+    <div id="presetGrid" class="preset-grid hidden"></div>
+    <div id="presetTableWrap">
+      <table>
+        <thead><tr><th>触发词</th><th>提示词</th><th>关键词</th><th>缩略图</th><th style="width:70px">来源</th><th style="width:80px">状态</th><th style="width:130px">操作</th></tr></thead>
+        <tbody id="presetRows"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card">
+    <h2>预设 JSON（高级编辑）</h2>
+    <textarea id="presetsJson" style="min-height:160px"></textarea>
+    <button class="primary" style="margin-top:8px" onclick="savePresetsJson()">保存预设</button>
+  </div>
+</section>
+
+<section id="page-remote" class="page hidden">
+  <div class="card">
+    <h2>在线预设同步</h2>
+    <div class="field" style="margin-bottom:10px">
+      <label>在线预设 API 地址</label>
+      <input id="cfg-preset_api_url" placeholder="https://prompt.vioaki.xyz/api/templates?per_page=-1">
+    </div>
+    <div class="row">
+      <label style="flex:0 0 auto">自动同步</label>
+      <select id="cfg-auto_sync" style="flex:0 0 110px"><option value="true">开启</option><option value="false">关闭</option></select>
+      <label style="flex:0 0 auto;margin-left:12px">间隔（分钟）</label>
+      <input id="cfg-sync_interval" type="number" style="flex:0 0 110px">
+      <label style="flex:0 0 auto;margin-left:12px">删除已移除</label>
+      <select id="cfg-delete_removed" style="flex:0 0 110px"><option value="true">开启</option><option value="false">关闭</option></select>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" onclick="syncPresets()">立即同步</button>
+      <button class="small" onclick="saveRemoteCfg()">保存上述设置</button>
+    </div>
+    <div id="syncResult" class="hint"></div>
+  </div>
+</section>
+
+<section id="page-config" class="page hidden">
+  <div class="card">
+    <h2>全局配置</h2>
+    <table>
+      <thead><tr><th>配置项</th><th>值</th></tr></thead>
+      <tbody id="configRows"></tbody>
+    </table>
+    <button class="primary" style="margin-top:8px" onclick="saveConfig()">保存配置</button>
+    <div class="hint">保存目录留空 = 默认保存在插件目录（当前: <span id="curSaveDir"></span>）。带 * 的为密钥/Token 字段，保留 **** 表示不修改；WebUI 端口等修改后需重启 AstrBot。</div>
+  </div>
+</section>
+
+<section id="page-tasks" class="page hidden">
+  <div class="card">
+    <h2>最近任务
+      <span class="spacer"></span>
+      <label class="auto-refresh"><input id="autoRefresh" type="checkbox" checked>自动刷新</label>
+      <button class="small" onclick="refreshTasksStats()">刷新</button>
+    </h2>
+    <table>
+      <thead><tr><th>ID</th><th>时间</th><th>用户</th><th>类型</th><th>状态</th><th>提示词</th></tr></thead>
+      <tbody id="taskRows"></tbody>
+    </table>
+    <div class="hint">点击任务行可查看详细信息</div>
+  </div>
+</section>
+
+<section id="page-stats" class="page hidden">
+  <div class="card">
+    <h2>用量统计<span class="spacer"></span><button class="small" onclick="refreshTasksStats()">刷新</button></h2>
+    <div id="statCards"></div>
+    <h2>按服务</h2>
+    <table>
+      <thead><tr><th>服务</th><th>图片</th><th>视频</th><th>音频</th></tr></thead>
+      <tbody id="statRows"></tbody>
+    </table>
+  </div>
+</section>
+</main>
+
+<div id="channelModal" class="modal">
+  <div class="box">
+    <h3 id="channelModalTitle">编辑渠道</h3>
+    <div class="field"><label>触发词（指令名）</label><input id="chName"></div>
+    <div class="field"><label>连接器</label><select id="chConnector"></select></div>
+    <div class="field"><label>显示名称</label><input id="chDisplayName"></div>
+    <div class="field"><label>关键词（逗号分隔，用于匹配预设）</label><input id="chTags" placeholder="text2img,img2img"></div>
+    <div class="field"><label>启用</label><select id="chEnabled"><option value="true">开启</option><option value="false">关闭</option></select></div>
+    <div id="chFields"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="primary" onclick="saveChannel()">保存</button>
+      <button class="small" onclick="closeModal('channelModal')">取消</button>
+      <span class="hint">双击空白处也可关闭</span>
+    </div>
+  </div>
+</div>
+
+<div id="presetModal" class="modal">
+  <div class="box">
+    <h3 id="presetModalTitle">编辑预设</h3>
+    <div class="field"><label>触发词（预设名）</label><input id="psName"></div>
+    <div class="field"><label>提示词模板（可用 {prompt} 占位符插入用户文字）</label><textarea id="psPrompt" style="min-height:100px"></textarea></div>
+    <div class="field"><label>关键词（逗号分隔，自动匹配渠道）</label><input id="psTags" placeholder="text2img,img2img,二次元"></div>
+    <div class="field" id="psThumbZone">
+      <label>缩略图（可直接拖入图片）</label>
+      <div class="row">
+        <input id="psThumb" placeholder="图片 URL 或上传路径">
+        <input type="file" id="psThumbFile" accept="image/*" style="flex:0 0 auto;width:auto">
+      </div>
+      <img id="psThumbPreview" class="thumb hidden" style="margin-top:6px">
+      <div class="dropzone" style="margin-top:6px">将图片拖到此处上传为缩略图</div>
+    </div>
+    <div class="field" id="psRefsZone">
+      <label>参考图（每行一个 URL / 上传路径，可直接拖入图片）</label>
+      <textarea id="psRefs" style="min-height:70px" placeholder="https://...&#10;media/xxx.png"></textarea>
+      <div class="row" style="margin-top:6px">
+        <input type="file" id="psRefFile" accept="image/*" style="flex:0 0 auto;width:auto">
+        <button class="small" onclick="appendRefFile()">把图片加到参考图</button>
+      </div>
+      <div class="dropzone" style="margin-top:6px">将图片拖到此处追加到参考图</div>
+    </div>
+    <div class="field"><label>启用</label><select id="psEnabled"><option value="true">开启</option><option value="false">关闭</option></select></div>
+    <div class="row" style="margin-top:14px">
+      <button class="primary" onclick="savePreset()">保存</button>
+      <button class="small" onclick="closeModal('presetModal')">取消</button>
+      <span class="hint">双击空白处也可关闭</span>
+    </div>
+  </div>
+</div>
+
+<div id="taskModal" class="modal">
+  <div class="box">
+    <h3>任务详情</h3>
+    <div id="taskDetail"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="small" onclick="closeModal('taskModal')">关闭</button>
+      <span class="hint">双击空白处也可关闭</span>
+    </div>
+  </div>
+</div>
+
+<div id="login">
+  <div class="box">
+    <h3>请输入访问 Token</h3>
+    <input id="tokenInput" placeholder="WebUI Token">
+    <div id="loginError" class="hidden" style="color:#b91c1c;font-size:13px;margin-top:8px"></div>
+    <button class="primary" onclick="saveToken()">确定</button>
+    <button class="small" style="width:100%;margin-top:8px" onclick="autoFillToken()">读取本机配置 Token</button>
+    <div class="hint" style="margin-top:8px">Token 位于 AstrBot 日志，或配置文件 <code>data/config/astrbot_plugin_media_luna_config.json</code> 的 webui_token 字段</div>
+  </div>
+</div>
+
+<script>
+let state = {channels:{},presets:{},tasks:[],stats:{},config:[]};
+let connectors = {};
+let token = localStorage.getItem('ml_token') || '';
+let editingChannel = null;
+let editingPreset = null;
+let presetMode = 'detail';
+
+function msg(text, ok){const b=document.getElementById('msgBox');b.textContent=text;b.className='msg '+(ok?'ok':'err');setTimeout(()=>b.className='msg',5000);}
+async function api(path, method, body){
+  const opt={method:method||'GET',headers:{'Authorization':'Bearer '+token}};
+  if(body!==undefined){opt.headers['Content-Type']='application/json';opt.body=JSON.stringify(body);}
+  const r=await fetch(path,opt);
+  if(r.status===401){const e=new Error('unauthorized');e.status=401;throw e;}
+  return r.json();
+}
+function showLogin(){document.getElementById('login').classList.add('show');}
+function setLoginError(msg){const el=document.getElementById('loginError');el.textContent=msg;el.classList.remove('hidden');}
+function clearLoginError(){document.getElementById('loginError').classList.add('hidden');}
+function saveToken(){
+  token=document.getElementById('tokenInput').value.trim();
+  if(!token){setLoginError('请输入 Token');return;}
+  clearLoginError();
+  localStorage.setItem('ml_token',token);
+  document.getElementById('login').classList.remove('show');
+  load();
+}
+async function autoFillToken(){
+  try{
+    const r=await fetch('/api/token');
+    const d=await r.json();
+    if(d.ok&&d.token){
+      token=d.token;
+      document.getElementById('tokenInput').value=token;
+      localStorage.setItem('ml_token',token);
+      clearLoginError();
+      document.getElementById('login').classList.remove('show');
+      await load();
+    }else{
+      setLoginError('无法读取 Token（WebUI 非本机监听）。请查看日志或配置文件中的 webui_token。');
+    }
+  }catch(e){
+    setLoginError('无法读取 Token：'+e.message);
+  }
+}
+function logout(){localStorage.removeItem('ml_token');token='';showLogin();}
+
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  document.querySelectorAll('.page').forEach(x=>x.classList.add('hidden'));
+  document.getElementById('page-'+b.dataset.page).classList.remove('hidden');
+});
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+async function load(){
+  try{
+    [state, connectors] = await Promise.all([api('/api/state'), api('/api/connectors')]);
+    document.getElementById('saveDirHint').textContent = '保存目录: ' + state.saveDir;
+    document.getElementById('curSaveDir').textContent = state.saveDir;
+    renderConnectorSelects();
+    renderChannels();renderPresets();renderConfig();renderTasks();renderStats();renderRemoteCfg();
+  }catch(e){
+    if(e.status===401){showLogin();setLoginError('Token 无效或已过期，请重新输入（可点击下方按钮一键读取）');}
+    else{msg('连接设置服务失败：'+e.message,false);}
+  }
+}
+
+async function refreshTasksStats(){
+  try{
+    const st = await api('/api/state');
+    state.tasks = st.tasks; state.stats = st.stats;
+    renderTasks(); renderStats();
+  }catch(e){}
+}
+
+function renderConnectorSelects(){
+  const opts = Object.entries(connectors).map(([id,c])=>'<option value="'+id+'">'+esc(c.name)+'</option>').join('');
+  document.getElementById('newChanConnector').innerHTML = opts;
+  document.getElementById('chConnector').innerHTML = opts;
+}
+
+function connectorOf(ch){return connectors[ch.connectorId]||null;}
+
+function renderChannels(){
+  const tb=document.getElementById('channelRows');tb.innerHTML='';
+  for(const [name,ch] of Object.entries(state.channels)){
+    const conn=connectorOf(ch);
+    const tr=document.createElement('tr');
+    const model=(ch.connectorConfig||{}).model||'-';
+    const tags=(ch.tags||[]).slice(0,3).join(', ')||'-';
+    tr.innerHTML='<td>'+esc(name)+'</td><td>'+esc(conn?conn.name:ch.connectorId)+'</td><td>'+esc(model)+'</td><td>'+esc(tags)+'</td>'+
+      '<td>'+(ch.enabled===false?'<span class="badge off">已禁用</span>':'<span class="badge">启用</span>')+'</td>';
+    const td=document.createElement('td');
+    const b1=document.createElement('button');b1.className='small';b1.textContent='编辑';b1.onclick=()=>openChannelEdit(name);
+    const b2=document.createElement('button');b2.className='danger';b2.style.marginLeft='6px';b2.textContent='删除';
+    b2.onclick=async()=>{if(confirm('删除渠道 '+name+'?')){await api('/api/channel/delete','POST',{name});await load();}};
+    td.appendChild(b1);td.appendChild(b2);tr.appendChild(td);tb.appendChild(tr);
+  }
+  document.getElementById('channelsJson').value=JSON.stringify(state.channels,null,2);
+}
+
+function openChannelEdit(name){
+  editingChannel=name||null;
+  document.getElementById('channelModalTitle').textContent=name?'编辑渠道 '+name:'新建渠道';
+  const ch = name?JSON.parse(JSON.stringify(state.channels[name])):{enabled:true,tags:[],connectorConfig:{}};
+  const cid = ch.connectorId || document.getElementById('newChanConnector').value;
+  ch.connectorId=cid;
+  document.getElementById('chName').value=name||'';
+  document.getElementById('chConnector').value=cid;
+  document.getElementById('chDisplayName').value=ch.displayName||'';
+  document.getElementById('chTags').value=(ch.tags||[]).join(',');
+  document.getElementById('chEnabled').value=ch.enabled===false?'false':'true';
+  renderChannelFields(ch);
+  document.getElementById('channelModal').classList.add('show');
+}
+
+function renderChannelFields(ch){
+  const conn=connectors[ch.connectorId];
+  const box=document.getElementById('chFields');box.innerHTML='';
+  if(!conn)return;
+  for(const f of conn.fields){
+    const val=ch.connectorConfig[f.key]!==undefined?ch.connectorConfig[f.key]:f.default;
+    const div=document.createElement('div');div.className='field';
+    const lab=document.createElement('label');lab.textContent=f.label+(f.required?' *':'');
+    div.appendChild(lab);
+    let input;
+    if(f.type==='textarea'){
+      input=document.createElement('textarea');input.style.minHeight='80px';input.value=val==null?'':val;
+    }else if(f.type==='boolean'){
+      input=document.createElement('select');
+      const o1=document.createElement('option');o1.value='true';o1.textContent='开启';
+      const o2=document.createElement('option');o2.value='false';o2.textContent='关闭';
+      input.appendChild(o1);input.appendChild(o2);input.value=val?'true':'false';
+    }else if(f.type==='select'){
+      input=document.createElement('select');
+      for(const o of f.options){const op=document.createElement('option');op.value=o.value;op.textContent=o.label;input.appendChild(op);}
+      input.value=val==null?'':val;
+    }else{
+      input=document.createElement('input');
+      if(f.type==='number')input.type='number';
+      else if(f.type==='password')input.type='password';
+      input.value=val==null?'':val;
+    }
+    input.dataset.key=f.key;input.dataset.type=f.type;
+    if(f.placeholder)input.placeholder=f.placeholder;
+    div.appendChild(input);
+    if(f.description){const d=document.createElement('div');d.className='desc';d.textContent=f.description;div.appendChild(d);}
+    box.appendChild(div);
+  }
+}
+
+document.getElementById('chConnector').onchange=function(){
+  renderChannelFields({connectorId:this.value,connectorConfig:{}});
+};
+
+async function saveChannel(){
+  const name=document.getElementById('chName').value.trim();
+  if(!name){msg('请填写触发词',false);return;}
+  const ch={displayName:document.getElementById('chDisplayName').value.trim()||name,
+    enabled:document.getElementById('chEnabled').value==='true',
+    connectorId:document.getElementById('chConnector').value,
+    connectorConfig:{},
+    tags:document.getElementById('chTags').value.split(/[,，]/).map(s=>s.trim()).filter(Boolean)};
+  document.querySelectorAll('#chFields [data-key]').forEach(el=>{
+    const k=el.dataset.key,t=el.dataset.type;
+    if(t==='boolean')ch.connectorConfig[k]=el.value==='true';
+    else if(t==='number')ch.connectorConfig[k]=el.value===''?null:Number(el.value);
+    else ch.connectorConfig[k]=el.value;
+  });
+  await api('/api/channel/save','POST',{name,data:ch});
+  msg('渠道已保存',true);
+  closeModal('channelModal');
+  await load();
+}
+
+async function saveChannelsJson(){
+  try{state.channels=JSON.parse(document.getElementById('channelsJson').value);}catch(e){msg('渠道 JSON 格式错误',false);return;}
+  for(const [name,data] of Object.entries(state.channels)){
+    await api('/api/channel/save','POST',{name,data});
+  }
+  msg('渠道已保存',true);await load();
+}
+
+function setPresetMode(mode){
+  presetMode=mode;
+  document.getElementById('presetModeDetail').classList.toggle('active',mode==='detail');
+  document.getElementById('presetModeSimple').classList.toggle('active',mode==='simple');
+  document.getElementById('presetGrid').classList.toggle('hidden',mode!=='simple');
+  document.getElementById('presetTableWrap').classList.toggle('hidden',mode==='simple');
+  renderPresets();
+}
+
+function renderPresets(){
+  if(presetMode==='simple'){
+    const grid=document.getElementById('presetGrid');grid.innerHTML='';
+    for(const [name,p] of Object.entries(state.presets)){
+      const card=document.createElement('div');card.className='preset-card';
+      const thumb=p.thumbnail
+        ?'<img src="'+esc(p.thumbnail)+'" onerror="this.outerHTML=\'<div class=&quot;no-thumb&quot;>🖼</div>\'">'
+        :'<div class="no-thumb">🖼</div>';
+      card.innerHTML=thumb+'<div class="name">'+esc(name)+'</div>'+
+        '<div class="meta">'+(p.source==='api'?'<span class="badge api">在线</span>':'<span class="badge">本地</span>')+' '+
+        (p.enabled===false?'<span class="badge off">禁用</span>':'')+'</div>';
+      card.onclick=()=>openPresetEdit(name);
+      grid.appendChild(card);
+    }
+    return;
+  }
+  const tb=document.getElementById('presetRows');tb.innerHTML='';
+  for(const [name,p] of Object.entries(state.presets)){
+    const tr=document.createElement('tr');
+    const thumb=p.thumbnail?'<img class="thumb" src="'+esc(p.thumbnail)+'" onerror="this.style.display=\'none\'">':'';
+    tr.innerHTML='<td>'+esc(name)+'</td><td>'+esc((p.promptTemplate||'').slice(0,50))+'</td><td>'+esc((p.tags||[]).slice(0,3).join(', '))+'</td><td>'+thumb+'</td>'+
+      '<td><span class="badge '+(p.source==='api'?'api':'')+'">'+(p.source==='api'?'在线':'本地')+'</span></td>'+
+      '<td>'+(p.enabled===false?'<span class="badge off">禁用</span>':'<span class="badge">启用</span>')+'</td>';
+    const td=document.createElement('td');
+    const b1=document.createElement('button');b1.className='small';b1.textContent='编辑';b1.onclick=()=>openPresetEdit(name);
+    const b2=document.createElement('button');b2.className='danger';b2.style.marginLeft='6px';b2.textContent='删除';
+    b2.onclick=async()=>{if(confirm('删除预设 '+name+'?')){await api('/api/preset/delete','POST',{name});await load();}};
+    td.appendChild(b1);td.appendChild(b2);tr.appendChild(td);tb.appendChild(tr);
+  }
+  document.getElementById('presetsJson').value=JSON.stringify(state.presets,null,2);
+}
+
+function openPresetEdit(name){
+  editingPreset=name||null;
+  document.getElementById('presetModalTitle').textContent=name?'编辑预设 '+name:'新建预设';
+  const p=name?JSON.parse(JSON.stringify(state.presets[name])):{promptTemplate:'',tags:[],referenceImages:[],source:'user',enabled:true,thumbnail:''};
+  document.getElementById('psName').value=name||'';
+  document.getElementById('psPrompt').value=p.promptTemplate||'';
+  document.getElementById('psTags').value=(p.tags||[]).join(',');
+  document.getElementById('psThumb').value=p.thumbnail||'';
+  document.getElementById('psRefs').value=(p.referenceImages||[]).join('\n');
+  document.getElementById('psEnabled').value=p.enabled===false?'false':'true';
+  const prev=document.getElementById('psThumbPreview');
+  if(p.thumbnail){prev.src=p.thumbnail;prev.classList.remove('hidden');}else{prev.classList.add('hidden');}
+  document.getElementById('presetModal').classList.add('show');
+}
+
+async function uploadImage(file){
+  if(!file)return null;
+  const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
+  const r=await api('/api/upload','POST',{filename:file.name,base64:b64});
+  if(r.ok)return r.path;
+  return null;
+}
+
+function setupDrop(zoneId, onFile){
+  const zone=document.getElementById(zoneId);
+  zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag');});
+  zone.addEventListener('dragleave',()=>zone.classList.remove('drag'));
+  zone.addEventListener('drop',async e=>{
+    e.preventDefault();zone.classList.remove('drag');
+    const files=[...(e.dataTransfer.files||[])].filter(f=>f.type.startsWith('image/'));
+    if(files.length)await onFile(files[0]);
+  });
+}
+setupDrop('psThumbZone',async f=>{
+  const path=await uploadImage(f);
+  if(path){document.getElementById('psThumb').value=path;const prev=document.getElementById('psThumbPreview');prev.src=path;prev.classList.remove('hidden');}
+});
+setupDrop('psRefsZone',async f=>{
+  const path=await uploadImage(f);
+  if(path){const box=document.getElementById('psRefs');box.value=(box.value.trim()?box.value.trim()+'\n':'')+path;}
+});
+
+document.getElementById('psThumbFile').onchange=async function(){
+  const path=await uploadImage(this.files[0]);
+  if(path){document.getElementById('psThumb').value=path;const prev=document.getElementById('psThumbPreview');prev.src=path;prev.classList.remove('hidden');}
+  this.value='';
+};
+
+async function appendRefFile(){
+  const input=document.getElementById('psRefFile');
+  const path=await uploadImage(input.files[0]);
+  if(path){
+    const box=document.getElementById('psRefs');
+    box.value=(box.value.trim()?box.value.trim()+'\n':'')+path;
+  }
+  input.value='';
+}
+
+async function savePreset(){
+  const name=document.getElementById('psName').value.trim();
+  if(!name){msg('请填写触发词',false);return;}
+  const refs=document.getElementById('psRefs').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  const p={promptTemplate:document.getElementById('psPrompt').value,
+    tags:document.getElementById('psTags').value.split(/[,，]/).map(s=>s.trim()).filter(Boolean),
+    referenceImages:refs,
+    parameterOverrides:{},
+    source:(editingPreset&&state.presets[editingPreset]&&state.presets[editingPreset].source)||'user',
+    enabled:document.getElementById('psEnabled').value==='true',
+    thumbnail:document.getElementById('psThumb').value.trim()};
+  await api('/api/preset/save','POST',{name,data:p});
+  msg('预设已保存',true);
+  closeModal('presetModal');
+  await load();
+}
+
+async function savePresetsJson(){
+  try{state.presets=JSON.parse(document.getElementById('presetsJson').value);}catch(e){msg('预设 JSON 格式错误',false);return;}
+  for(const [name,data] of Object.entries(state.presets)){
+    await api('/api/preset/save','POST',{name,data});
+  }
+  msg('预设已保存',true);await load();
+}
+
+function renderRemoteCfg(){
+  document.getElementById('cfg-preset_api_url').value=state.config.find(c=>c.key==='preset_api_url')?.value||'';
+  document.getElementById('cfg-auto_sync').value=!!state.config.find(c=>c.key==='auto_sync')?.value?'true':'false';
+  document.getElementById('cfg-sync_interval').value=state.config.find(c=>c.key==='sync_interval')?.value||60;
+  document.getElementById('cfg-delete_removed').value=!!state.config.find(c=>c.key==='delete_removed')?.value?'true':'false';
+}
+
+async function syncPresets(){
+  document.getElementById('syncResult').textContent='正在同步...';
+  const r=await api('/api/preset/sync','POST',{});
+  document.getElementById('syncResult').textContent=r.ok?
+    '✅ 同步完成: 新增 '+r.added+'，更新 '+r.updated+'，删除 '+r.removed+(r.errors&&r.errors.length?'，失败 '+r.errors.length:'') :
+    '❌ 同步失败: '+(r.error||'');
+  await load();
+}
+
+async function saveRemoteCfg(){
+  const updates={
+    preset_api_url:document.getElementById('cfg-preset_api_url').value.trim(),
+    auto_sync:document.getElementById('cfg-auto_sync').value==='true',
+    sync_interval:Number(document.getElementById('cfg-sync_interval').value)||60,
+    delete_removed:document.getElementById('cfg-delete_removed').value==='true'
+  };
+  await api('/api/config','POST',updates);
+  msg('在线预设设置已保存',true);
+}
+
+function renderConfig(){
+  const tb=document.getElementById('configRows');tb.innerHTML='';
+  for(const item of state.config){
+    if(item.key==='webui_token')continue;
+    const tr=document.createElement('tr');
+    const td1=document.createElement('td');
+    td1.textContent=item.name||item.key;
+    if(item.description){const d=document.createElement('div');d.className='desc';d.textContent=item.description;td1.appendChild(d);}
+    const td2=document.createElement('td');
+    let inp=document.createElement('input');
+    inp.dataset.key=item.key;
+    if(typeof item.value==='boolean'){
+      inp=document.createElement('select');
+      const o1=document.createElement('option');o1.value='true';o1.textContent='开启';
+      const o2=document.createElement('option');o2.value='false';o2.textContent='关闭';
+      inp.appendChild(o1);inp.appendChild(o2);inp.value=item.value?'true':'false';inp.dataset.bool='1';
+    }else if(typeof item.value==='number'){
+      inp.type='number';inp.value=item.value;
+    }else{
+      inp.value=item.masked?'****':item.value;
+    }
+    td2.appendChild(inp);tr.appendChild(td1);tr.appendChild(td2);tb.appendChild(tr);
+  }
+}
+
+async function saveConfig(){
+  const updates={};
+  document.querySelectorAll('#configRows input, #configRows select').forEach(inp=>{
+    if(inp.dataset.bool)updates[inp.dataset.key]=inp.value==='true';
+    else if(inp.type==='number')updates[inp.dataset.key]=Number(inp.value);
+    else if(inp.value==='****')return;
+    else updates[inp.dataset.key]=inp.value;
+  });
+  await api('/api/config','POST',updates);
+  msg('配置已保存（WebUI 端口/监听地址等需重启 AstrBot 生效）',true);
+  await load();
+}
+
+function renderTasks(){
+  const tb=document.getElementById('taskRows');tb.innerHTML='';
+  for(const t of state.tasks.slice().reverse()){
+    const tr=document.createElement('tr');tr.className='task-row';
+    tr.innerHTML='<td>'+esc(t.id)+'</td><td>'+esc(new Date(t.ts*1000).toLocaleString())+'</td><td>'+esc(t.user_name||'')+'</td><td>'+esc((t.kind||'')+'/'+(t.channel||''))+'</td><td>'+esc(t.status||'')+'</td><td>'+esc((t.prompt||'').slice(0,40))+'</td>';
+    tr.onclick=()=>openTaskDetail(t.id);
+    tb.appendChild(tr);
+  }
+}
+
+async function openTaskDetail(id){
+  try{
+    const t=await api('/api/task/'+encodeURIComponent(id));
+    const lines=[
+      '任务 ID: '+t.id,
+      '时间: '+new Date(t.ts*1000).toLocaleString(),
+      '用户: '+(t.user_name||'')+' ('+(t.user_id||'')+')',
+      '类型: '+(t.kind||'')+' / '+(t.channel||''),
+      '状态: '+t.status,
+      '提示词: '+(t.prompt||''),
+      '结果: '+(t.result||'（无）')
+    ];
+    document.getElementById('taskDetail').textContent=lines.join('\n');
+    document.getElementById('taskModal').classList.add('show');
+  }catch(e){msg('获取任务详情失败',false);}
+}
+
+function renderStats(){
+  const st=state.stats||{};
+  const total=st.total||{};
+  document.getElementById('statCards').innerHTML=
+    '<div class="stat">图片生成 <b>'+(total.image||0)+'</b> 次</div>'+
+    '<div class="stat">视频生成 <b>'+(total.video||0)+'</b> 次</div>'+
+    '<div class="stat">音频生成 <b>'+(total.audio||0)+'</b> 次</div>';
+  const tb=document.getElementById('statRows');tb.innerHTML='';
+  for(const [name,svc] of Object.entries(st.services||{})){
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td>'+esc(name)+'</td><td>'+(svc.image||0)+'</td><td>'+(svc.video||0)+'</td><td>'+(svc.audio||0)+'</td>';
+    tb.appendChild(tr);
+  }
+}
+
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+// 单击空白不关闭，双击空白才关闭
+document.querySelectorAll('.modal').forEach(m=>m.addEventListener('dblclick',e=>{if(e.target===m)closeModal(m.id);}));
+
+// 自动刷新（默认开启，5 秒一次）
+setInterval(()=>{
+  if(document.getElementById('autoRefresh')&&document.getElementById('autoRefresh').checked){
+    refreshTasksStats();
+  }
+},5000);
+
+load();
+</script>
+</body>
+</html>

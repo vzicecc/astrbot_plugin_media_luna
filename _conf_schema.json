@@ -1,0 +1,80 @@
+{
+  "preset_api_url": {
+    "name": "在线预设 API 地址",
+    "description": "拉取在线预设模板的接口，默认 Prompt-Manager",
+    "type": "string",
+    "default": "https://prompt.vioaki.xyz/api/templates?per_page=-1"
+  },
+  "auto_sync": {
+    "name": "自动同步在线预设",
+    "description": "启用后按固定间隔自动同步在线预设",
+    "type": "bool",
+    "default": false
+  },
+  "sync_interval": {
+    "name": "自动同步间隔（分钟）",
+    "description": "自动同步间隔",
+    "type": "int",
+    "default": 60
+  },
+  "delete_removed": {
+    "name": "删除已移除的在线预设",
+    "description": "同步时删除远程已下线的预设",
+    "type": "bool",
+    "default": false
+  },
+  "save_dir": {
+    "name": "图片/视频保存目录",
+    "description": "留空默认保存在插件目录下",
+    "type": "string",
+    "default": ""
+  },
+  "timeout": {
+    "name": "生成超时（秒）",
+    "description": "生成任务的默认最长等待时间",
+    "type": "int",
+    "default": 300
+  },
+  "output_show_task_id": {
+    "name": "输出显示任务ID",
+    "description": "生成结果中是否显示任务ID",
+    "type": "bool",
+    "default": true
+  },
+  "output_show_elapsed": {
+    "name": "输出显示生成用时",
+    "description": "生成结果中是否显示生成总用时",
+    "type": "bool",
+    "default": true
+  },
+  "output_show_model": {
+    "name": "输出显示使用模型",
+    "description": "生成结果中是否显示使用的模型",
+    "type": "bool",
+    "default": true
+  },
+  "webui_enable": {
+    "name": "启用独立 WebUI",
+    "description": "是否在独立端口启动全量设置页面",
+    "type": "bool",
+    "default": true
+  },
+  "webui_host": {
+    "name": "WebUI 监听地址",
+    "description": "127.0.0.1 仅本机可访问；0.0.0.0 局域网可访问",
+    "type": "string",
+    "default": "127.0.0.1"
+  },
+  "webui_port": {
+    "name": "WebUI 端口",
+    "description": "独立设置页面的端口，如 6186",
+    "type": "int",
+    "default": 6186
+  },
+  "webui_token": {
+    "name": "WebUI 访问 Token",
+    "description": "留空则自动生成随机 Token",
+    "type": "string",
+    "default": ""
+  }
+}
