@@ -558,16 +558,8 @@ def default_channel_config(connector_id: str) -> dict:
     }
 
 
-DEFAULT_CHANNELS = {
-    cid: {
-        "displayName": CONNECTORS[cid]["name"],
-        "enabled": True,
-        "connectorId": cid,
-        "connectorConfig": default_channel_config(cid),
-        "tags": list(CONNECTORS[cid].get("defaultTags", [])),
-    }
-    for cid in CONNECTORS
-}
+# 默认渠道列表为空：需要哪个渠道就自己在 WebUI 添加
+DEFAULT_CHANNELS = {}
 
 
 def load_json(path: str, default):

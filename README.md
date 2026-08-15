@@ -7,6 +7,7 @@
   - 视频：OpenAI Video (Sora)、Agnes Video、NewAPI Video、Runway、智谱 CogVideoX
   - 音频：Suno AI 音乐
 - **每个渠道可自定义**：请求地址、API Key、模型、输出尺寸/宽高比、步数、采样器、负面提示词等，字段随连接器动态变化
+- 默认渠道列表为空，首次安装后需要自己在 WebUI（插件页 → 渠道 → 新建渠道）按需添加
 - **在线预设**：拉取 Prompt-Manager 在线模板，自动生成关键词（类型标签 + 模板标签）；预设支持自定义触发词、提示词（可用 `{prompt}` 占位符）、参考图、缩略图
 - **保存目录可配置**：`save_dir` 留空默认保存在插件目录下，也可指向任意目录
 - 简单用量统计（`/stats`、`/mystats`）、任务记录（`/tasks`、`/taskinfo`），不做积分计费
