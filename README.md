@@ -82,16 +82,18 @@
 
 ## 保存目录
 
-`save_dir` 留空时，生成的图片/视频默认保存在**插件目录**下（文件名形如 `20260812_103000_gemini_0.png`）。设置后保存到指定目录（例如 `R:\AstrBot\data\media-luna-images`）。
+`save_dir` 留空时，生成的图片/视频默认保存在**插件数据目录** `data/plugin_data/media_luna/` 下（文件名形如 `20260812_103000_gemini_0.png`）。设置后保存到指定目录（例如 `R:\AstrBot\data\media-luna-images`）。
 
 ## 数据文件
 
-插件目录下：
+运行时数据统一存放在 **`data/plugin_data/media_luna/`**（AstrBot 官方插件数据区，**插件更新/重装不会删除**）：
 
 - `channels.json`：渠道定义（`connectorId` + 每渠道 `connectorConfig` + `tags`）
 - `presets.json`：预设（触发词=键名，含 `promptTemplate`、`tags`、`referenceImages`、`thumbnail`、`source`）
 - `tasks.json` / `stats.json`：任务记录与用量统计
 - `media/`：WebUI 上传的缩略图/参考图
+
+旧版本存放在插件目录内的数据会在首次加载时**自动迁移**到该目录，不会丢失。插件配置仍在 `data/config/media_luna_config.json`（同样位于插件目录之外，更新保留）。
 
 ## 注意
 

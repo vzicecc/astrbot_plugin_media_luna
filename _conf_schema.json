@@ -25,7 +25,7 @@
   },
   "save_dir": {
     "name": "图片/视频保存目录",
-    "description": "留空默认保存在插件目录下",
+    "description": "留空默认保存在插件数据目录（data/plugin_data/media_luna）",
     "type": "string",
     "default": ""
   },

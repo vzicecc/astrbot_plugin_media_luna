@@ -16,6 +16,7 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import At, Image, Plain, Record, Reply, Video
 from astrbot.core.star.filter.command import CommandFilter, GreedyStr
 from astrbot.core.star.filter.regex import RegexFilter
+from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 from astrbot.core.star.star_handler import (
     EventType,
     StarHandlerMetadata,
@@ -23,12 +24,42 @@ from astrbot.core.star.star_handler import (
 )
 
 PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
-CHANNELS_FILE = os.path.join(PLUGIN_DIR, "channels.json")
-PRESETS_FILE = os.path.join(PLUGIN_DIR, "presets.json")
-TASKS_FILE = os.path.join(PLUGIN_DIR, "tasks.json")
-STATS_FILE = os.path.join(PLUGIN_DIR, "stats.json")
-MEDIA_DIR = os.path.join(PLUGIN_DIR, "media")
+DATA_BASE = os.path.join(get_astrbot_plugin_data_path(), "media_luna")
+CHANNELS_FILE = os.path.join(DATA_BASE, "channels.json")
+PRESETS_FILE = os.path.join(DATA_BASE, "presets.json")
+TASKS_FILE = os.path.join(DATA_BASE, "tasks.json")
+STATS_FILE = os.path.join(DATA_BASE, "stats.json")
+MEDIA_DIR = os.path.join(DATA_BASE, "media")
 MAX_TASKS = 500
+
+
+def migrate_legacy_data(legacy: str | None = None, new_base: str | None = None) -> None:
+    """将旧版本存放在插件目录内的运行时数据迁移到 data/plugin_data/media_luna。
+
+    插件更新会重建插件目录，只有把数据放在 data/plugin_data 下才能保留。
+    """
+    legacy = legacy or PLUGIN_DIR
+    new_base = new_base or DATA_BASE
+    if os.path.abspath(legacy) == os.path.abspath(new_base):
+        return
+    os.makedirs(new_base, exist_ok=True)
+    for name in ("channels.json", "presets.json", "tasks.json", "stats.json"):
+        old = os.path.join(legacy, name)
+        new = os.path.join(new_base, name)
+        if os.path.exists(old) and not os.path.exists(new):
+            try:
+                os.replace(old, new)
+                logger.info(f"media-luna 数据已迁移: {old} -> {new}")
+            except Exception as e:
+                logger.warning(f"media-luna 数据迁移失败 {old}: {e}")
+    old_media = os.path.join(legacy, "media")
+    new_media = os.path.join(new_base, "media")
+    if os.path.isdir(old_media) and not os.path.isdir(new_media):
+        try:
+            os.replace(old_media, new_media)
+            logger.info("media-luna media 目录已迁移")
+        except Exception as e:
+            logger.warning(f"media-luna media 目录迁移失败: {e}")
 
 
 def _field(
@@ -571,6 +602,7 @@ class Main(star.Star):
         self._sync_task = None
         self._channel_cmd_handlers = []
         self._channel_regex_handler = None
+        migrate_legacy_data()
         os.makedirs(MEDIA_DIR, exist_ok=True)
         self._migrate_channels()
         if not os.path.exists(CHANNELS_FILE):
@@ -636,7 +668,8 @@ class Main(star.Star):
             path = os.path.abspath(d)
             os.makedirs(path, exist_ok=True)
             return path
-        return PLUGIN_DIR
+        os.makedirs(DATA_BASE, exist_ok=True)
+        return DATA_BASE
 
     def channel_names(self) -> list[str]:
         return list(load_json(CHANNELS_FILE, {}).keys())
