@@ -13,7 +13,7 @@ import aiohttp
 
 from astrbot.api import logger, star
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.message_components import Image, Plain, Record, Video
+from astrbot.api.message_components import At, Image, Plain, Record, Reply, Video
 from astrbot.core.star.filter.command import CommandFilter, GreedyStr
 from astrbot.core.star.filter.regex import RegexFilter
 from astrbot.core.star.star_handler import (
@@ -710,14 +710,48 @@ class Main(star.Star):
         return None
 
     async def _collect_reference_files(self, event, preset) -> list[dict]:
+        """收集参考图：
+        1. 预设自带的参考图
+        2. 引用消息中被引用消息内的图片（只取图片，其余忽略）
+        3. @ 用户 → 其头像
+        4. 当前消息中附带的图片
+        """
         files = []
         if preset:
             for ref in preset.get("referenceImages", []) or []:
                 f = await self._load_reference_file(ref)
                 if f:
                     files.append(f)
-        # 用户消息中附带的图片
-        for comp in event.get_messages():
+
+        messages = event.get_messages()
+
+        # 引用消息：只取被引用消息内的图片
+        for comp in messages:
+            if isinstance(comp, Reply):
+                for sub in comp.chain or []:
+                    if isinstance(sub, Image):
+                        try:
+                            b64 = await sub.convert_to_base64()
+                            files.append({"data": b64, "mime": "image/png"})
+                        except Exception:
+                            url = sub.url or (sub.file if str(sub.file or "").startswith("http") else "")
+                            if url:
+                                f = await self._load_reference_file(url)
+                                if f:
+                                    files.append(f)
+
+        # @ 用户 → 获取其头像
+        for comp in messages:
+            if isinstance(comp, At):
+                qq = str(comp.qq or "").strip()
+                if qq and qq != "all":
+                    avatar_url = f"https://q1.qlogo.cn/g?b=qq&nk={qq}&s=640"
+                    f = await self._load_reference_file(avatar_url)
+                    if f:
+                        files.append(f)
+
+        # 当前消息中附带的图片
+        for comp in messages:
             if isinstance(comp, Image):
                 try:
                     b64 = await comp.convert_to_base64()
