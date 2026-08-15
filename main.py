@@ -594,6 +594,7 @@ class Main(star.Star):
         self._sync_task = None
         self._channel_cmd_handlers = []
         self._channel_regex_handler = None
+        self._recent_generations: dict[str, float] = {}
         migrate_legacy_data()
         os.makedirs(MEDIA_DIR, exist_ok=True)
         self._migrate_channels()
@@ -2176,6 +2177,33 @@ class Main(star.Star):
 
     """==================== 命令 ===================="""
 
+    def _friendly_error(self, e: Exception, channel_name: str = "") -> str:
+        """把底层异常转成简洁、可读的用户提示（完整堆栈只进日志）。"""
+        text = str(e)
+        low = text.lower()
+        if any(k in text for k in ("safety", "blocked", "violation", "sensitive", "敏感", "安全", "非法内容")):
+            return "❌ 生成失败：被内容安全策略拦截，请调整提示词或参考图后重试（可换用其他渠道/模型）"
+        if "无可用渠道" in text or "no available channel" in low or "无可用模型" in text:
+            model = ""
+            chan = self.get_channel(channel_name) if channel_name else None
+            if chan:
+                model = str((chan.get("connectorConfig") or {}).get("model", "") or "")
+            m = f"「{model}」" if model else ""
+            return f"❌ 生成失败：模型{m}在当前服务商没有可用渠道（HTTP 503），请更换模型或稍后再试"
+        if "expecting value" in low or "json.decoder" in low or "不是 json" in text or "响应不是 json" in low:
+            return "❌ 生成失败：接口返回内容异常（不是标准 JSON），请检查渠道的请求地址/接口路径"
+        if low.startswith("http "):
+            code = text[5:].split(":", 1)[0].strip()
+            return f"❌ 生成失败：接口返回 HTTP {code}，请检查渠道的密钥/地址/模型配置或稍后再试"
+        if "timeout" in low or "超时" in text:
+            return "❌ 生成失败：请求超时，请稍后重试或调大渠道超时时间"
+        if "任务失败" in text:
+            return "❌ 生成失败：服务端任务处理失败，请稍后重试"
+        first = text.splitlines()[0].strip()
+        if len(first) > 150:
+            first = first[:150] + "…"
+        return f"❌ 生成失败：{first}"
+
     async def _run_generate(self, event, args, kind, channel_override=None, prompt_override=None):
         """统一的生成入口。
 
@@ -2203,6 +2231,18 @@ class Main(star.Star):
         if not prompt:
             yield event.plain_result("❌ 提示词为空")
             return
+        # 去重：同一消息 ID + 同一渠道只生成一次，防止重复触发/重复上报
+        now0 = time.time()
+        msg_id = str(getattr(getattr(event, "message_obj", None), "message_id", "") or "")
+        dedup_key = f"{event.get_sender_id()}:{msg_id}:{channel_name}"
+        if msg_id:
+            self._recent_generations = {
+                k: ts for k, ts in self._recent_generations.items()
+                if now0 - ts < 120
+            }
+            if dedup_key in self._recent_generations:
+                return
+            self._recent_generations[dedup_key] = now0
         task_id = uuid.uuid4().hex[:8]
         start = time.time()
         kind_label = {"image": "图片", "video": "视频", "audio": "音频"}.get(kind, kind)
@@ -2217,12 +2257,7 @@ class Main(star.Star):
                 event.get_sender_id(), event.get_sender_name(), kind, channel_name,
                 prompt, "failed", task_id=task_id,
             )
-            err_text = str(e).lower()
-            if any(k in err_text for k in ("safety", "blocked", "violation", "sensitive", "敏感", "安全", "非法内容")):
-                hint = "\n💡 提示：被内容安全策略拦截，请调整提示词或参考图后重试（可换用其他渠道/模型）"
-            else:
-                hint = ""
-            yield event.plain_result(f"❌ 生成失败: {e}{hint}")
+            yield event.plain_result(self._friendly_error(e, channel_name))
             return
         elapsed = time.time() - start
         model_name = (
@@ -2306,9 +2341,11 @@ class Main(star.Star):
 
             def make_handler(cmd_name=name, cmd_kind=kind):
                 async def _channel_cmd(event):
-                    text = event.get_message_str().strip()
-                    if text.startswith("/"):
-                        text = text[1:]
+                    raw = (event.get_message_str() or "").strip()
+                    if not raw.startswith("/"):
+                        # 免唤醒入口（正则）会处理非斜杠消息，这里只负责 /渠道 形式，避免重复触发
+                        return
+                    text = raw[1:]
                     if text == cmd_name:
                         rest = ""
                     elif text.startswith(cmd_name + " "):
